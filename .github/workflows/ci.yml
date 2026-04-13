@@ -44,16 +44,20 @@ jobs:
 
       - name: Build March compiler
         run: |
+          export OPAMSWITCH=${{ github.workspace }}
+          eval $(opam env)
           git clone --depth 1 https://github.com/march-language/march.git /tmp/march
           cd /tmp/march
           opam install --deps-only -y .
-          eval $(opam env)
           dune build
+          ln -s $(pwd)/_build/default/bin/main.exe $(pwd)/_build/default/bin/march
+          ln -s $(pwd)/_build/default/forge/bin/main.exe $(pwd)/_build/default/forge/bin/forge
           echo "$(pwd)/_build/default/bin" >> $GITHUB_PATH
           echo "$(pwd)/_build/default/forge/bin" >> $GITHUB_PATH
 
       - name: Run tests
         run: |
+          export OPAMSWITCH=${{ github.workspace }}
           eval $(opam env)
-          cd ${{ github.workspace }}
+          export MARCH_STDLIB=/tmp/march/stdlib
           forge test --coverage
