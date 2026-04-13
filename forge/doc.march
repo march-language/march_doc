@@ -2,6 +2,9 @@
 --
 -- Reads FORGE_TASK_ARGS for flags, discovers the current project's
 -- source directories from forge.toml, and generates HTML docs.
+--
+-- Forge automatically sets MARCH_STDLIB to the stdlib source directory,
+-- so stdlib docs are included by default.
 
 mod MarchDocTask do
 
@@ -13,26 +16,26 @@ pfn parse_args() do
     Some(s) -> s
   end
   let parts = List.filter(String.split(raw, "\n"), fn s -> !String.is_empty(s))
-  fn go(ls, output, private, stdlib) do
+  fn go(ls, output, private, no_stdlib) do
     match ls do
-    Nil -> (output, private, stdlib)
+    Nil -> (output, private, no_stdlib)
     Cons(arg, rest) ->
-      if arg == "--private" do go(rest, output, true, stdlib)
+      if arg == "--private" do go(rest, output, true, no_stdlib)
       else
-        if arg == "--stdlib" do go(rest, output, private, true)
+        if arg == "--no-stdlib" do go(rest, output, private, true)
         else
           if arg == "-o" do
             match rest do
-            Cons(val, rest2) -> go(rest2, val, private, stdlib)
-            Nil -> go(Nil, output, private, stdlib)
+            Cons(val, rest2) -> go(rest2, val, private, no_stdlib)
+            Nil -> go(Nil, output, private, no_stdlib)
             end
           else
             if arg == "--output" do
               match rest do
-              Cons(val, rest2) -> go(rest2, val, private, stdlib)
-              Nil -> go(Nil, output, private, stdlib)
+              Cons(val, rest2) -> go(rest2, val, private, no_stdlib)
+              Nil -> go(Nil, output, private, no_stdlib)
               end
-            else go(rest, output, private, stdlib) end
+            else go(rest, output, private, no_stdlib) end
           end
         end
       end
@@ -60,39 +63,32 @@ pfn find_project_root() do
   go(System.cwd())
 end
 
--- Find the stdlib directory.
--- Resolution order (mirrors the compiler):
---   1. MARCH_STDLIB env var (explicit override)
---   2. Relative to the march binary (bin/../stdlib, bin/../share/march/stdlib, etc.)
---   3. CWD-relative fallback (stdlib)
-pfn find_stdlib_dir() do
-  -- 1. Explicit env override
+-- Get the stdlib directory.
+-- Forge sets MARCH_STDLIB automatically. Falls back to exe-relative resolution.
+pfn stdlib_dir() do
   match System.env("MARCH_STDLIB") do
     Some(dir) -> if Dir.exists(dir) do Some(dir) else None end
     None ->
-      -- 2. Resolve from the march executable location
+      -- Fallback: resolve from the march binary location
       let bin_dir = match List.head_opt(System.argv()) do
         None -> ""
         Some(exe) -> Path.dirname(exe)
       end
-      let candidates = if String.is_empty(bin_dir) do
-        ["stdlib"]
+      if String.is_empty(bin_dir) do None
       else
-        [
+        let candidates = [
           Path.normalize(Path.join(bin_dir, "../stdlib")),
           Path.normalize(Path.join(bin_dir, "../../stdlib")),
-          Path.normalize(Path.join(bin_dir, "../share/march/stdlib")),
-          Path.normalize(Path.join(bin_dir, "../share/march")),
-          "stdlib"
+          Path.normalize(Path.join(bin_dir, "../share/march/stdlib"))
         ]
-      end
-      fn go(ls) do
-        match ls do
-          Nil -> None
-          Cons(c, rest) -> if Dir.exists(c) do Some(c) else go(rest) end
+        fn go(ls) do
+          match ls do
+            Nil -> None
+            Cons(c, rest) -> if Dir.exists(c) do Some(c) else go(rest) end
+          end
         end
+        go(candidates)
       end
-      go(candidates)
   end
 end
 
@@ -105,38 +101,30 @@ end
 -- ── Main ─────────────────────────────────────────────────────────────────────
 
 fn main() do
-  let (output_dir, include_private, stdlib_only) = parse_args()
+  let (output_dir, include_private, no_stdlib) = parse_args()
 
-  let dirs = if stdlib_only do
-    match find_stdlib_dir() do
-    None ->
-      IO.warn("march_doc: stdlib directory not found")
-      System.exit(1)
-      Nil
-    Some(d) -> [d]
-    end
-  else
-    match find_project_root() do
-    None ->
-      IO.warn("march_doc: no forge.toml found (run from a March project)")
-      System.exit(1)
-      Nil
-    Some(root) ->
-      let src = project_src_dirs(root)
-      let stdlib = match find_stdlib_dir() do
+  match find_project_root() do
+  None ->
+    IO.warn("march_doc: no forge.toml found (run from a March project)")
+    System.exit(1)
+  Some(root) ->
+    let src = project_src_dirs(root)
+    let stdlib = if no_stdlib do Nil
+    else
+      match stdlib_dir() do
         None -> Nil
         Some(d) -> [d]
       end
-      List.append(src, stdlib)
     end
+    let dirs = List.append(src, stdlib)
+
+    if List.is_empty(dirs) do
+      IO.warn("march_doc: no source directories found")
+      System.exit(1)
+    else () end
+
+    MarchDoc.generate(dirs, output_dir, include_private)
   end
-
-  if List.is_empty(dirs) do
-    IO.warn("march_doc: no source directories found")
-    System.exit(1)
-  else () end
-
-  MarchDoc.generate(dirs, output_dir, include_private)
 end
 
 end
