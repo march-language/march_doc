@@ -1,0 +1,49 @@
+-- MarchDoc — HTML documentation generator for March projects.
+--
+-- Usage:
+--   forge march_doc.doc              generate docs for current project
+--   forge march_doc.doc --stdlib     generate docs for stdlib only
+--   forge march_doc.doc -o DIR       set output directory (default: doc)
+--   forge march_doc.doc --private    include private functions
+
+mod MarchDoc do
+
+-- Generate HTML documentation for all .march files in the given directories.
+fn generate(src_dirs : List(String), output_dir : String, include_private : Bool) : () do
+  let all_files = List.sort_by(
+    List.flat_map(src_dirs, Discovery.walk_march_files),
+    fn (a, b) -> a < b
+  )
+  IO.warn("march_doc: parsing " ++ String.from_int(List.length(all_files)) ++ " source files...")
+  let modules = List.sort_by(
+    List.filter_map(all_files, fn path -> Parser.parse_file(path, include_private)),
+    fn (a, b) -> Parser.info_name(a) < Parser.info_name(b)
+  )
+  IO.warn("march_doc: generating " ++ String.from_int(List.length(modules)) ++ " module pages...")
+  match Dir.mkdir_p(output_dir) do
+    Err(_) ->
+      IO.warn("march_doc: cannot create " ++ output_dir)
+      System.exit(1)
+    Ok(_) -> ()
+  end
+  let module_names = List.map(modules, Parser.info_name)
+  let sidebar = Html.sidebar_links(module_names)
+  List.each(modules, fn info ->
+    let name = Parser.info_name(info)
+    let html = Html.render_module(info, sidebar)
+    match File.write(output_dir ++ "/" ++ name ++ ".html", html) do
+      Err(_) -> IO.warn("march_doc: failed to write " ++ name ++ ".html")
+      Ok(_) -> ()
+    end
+  )
+  let idx = Html.render_index(modules, sidebar)
+  match File.write(output_dir ++ "/index.html", idx) do
+    Err(_) -> IO.warn("march_doc: failed to write index.html")
+    Ok(_) -> ()
+  end
+  IO.puts("march_doc: generated " ++ String.from_int(List.length(modules)) ++
+    " module pages in " ++ output_dir ++ "/")
+  IO.puts("  open " ++ output_dir ++ "/index.html")
+end
+
+end

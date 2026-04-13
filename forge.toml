@@ -1,0 +1,12 @@
+[package]
+name = "march_doc"
+version = "0.1.0"
+type = "tool"
+description = "HTML documentation generator for March projects"
+author = "March Contributors"
+
+[archive.task.doc]
+command = "march_doc.doc"
+module = "forge/doc.march"
+
+[deps]

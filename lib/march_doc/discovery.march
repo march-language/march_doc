@@ -1,0 +1,20 @@
+-- ExDoc.Discovery — find .march source files in directories.
+
+mod Discovery do
+
+fn walk_march_files(dir : String) : List(String) do
+  match Dir.list(dir) do
+  Err(_) -> Nil
+  Ok(names) ->
+    List.flat_map(names, fn name ->
+      let path = dir ++ "/" ++ name
+      if Dir.exists(path) do walk_march_files(path)
+      else
+        if String.ends_with(name, ".march") do Cons(path, Nil)
+        else Nil end
+      end
+    )
+  end
+end
+
+end

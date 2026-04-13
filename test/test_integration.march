@@ -1,0 +1,196 @@
+-- Integration tests: full MarchDoc.generate pipeline.
+
+mod TestIntegration do
+
+-- Shared setup helper: write source, generate docs, return output dir
+pfn setup_and_generate(name, files, include_private) do
+  let src_dir = "/tmp/march_doc_integ_" ++ name ++ "_src"
+  let out_dir = "/tmp/march_doc_integ_" ++ name ++ "_out"
+  match Dir.mkdir_p(src_dir) do Err(_) -> () | Ok(_) -> () end
+  List.each(files, fn pair ->
+    match pair do
+      (fname, content) ->
+        match File.write(src_dir ++ "/" ++ fname, content) do Ok(_) -> () | Err(_) -> () end
+    end
+  )
+  MarchDoc.generate(Cons(src_dir, Nil), out_dir, include_private)
+  out_dir
+end
+
+pfn read_file(path) do
+  match File.read(path) do
+    Ok(content) -> content
+    Err(_) -> ""
+  end
+end
+
+describe "Integration" do
+
+  describe "basic generation" do
+
+    test "generates HTML from multiple modules" do
+      let out = setup_and_generate("basic", Cons(
+        ("string_util.march", "-- String utilities.\nmod StringUtil do\n\ndoc \"Returns length\"\nfn len(s : String) : Int do String.byte_size(s) end\n\ntype Mode = Fast | Slow\n\nend"),
+        Cons(("math_helper.march", "mod MathHelper do\n\nfn add(a : Int, b : Int) : Int do a + b end\n\nfn mul(a : Int, b : Int) : Int do a * b end\n\nend"), Nil)), false)
+      let idx = read_file(out ++ "/index.html")
+      assert (String.contains(idx, "StringUtil"))
+      assert (String.contains(idx, "MathHelper"))
+      assert (String.contains(idx, "2 modules"))
+      let su = read_file(out ++ "/StringUtil.html")
+      assert (String.contains(su, "StringUtil"))
+      assert (String.contains(su, "len"))
+      assert (String.contains(su, "Returns length"))
+      assert (String.contains(su, "Mode"))
+      assert (String.contains(su, "Functions"))
+      assert (String.contains(su, "Types"))
+      assert (String.contains(su, "bty"))
+      let mh = read_file(out ++ "/MathHelper.html")
+      assert (String.contains(mh, "MathHelper"))
+      assert (String.contains(mh, "add"))
+      assert (String.contains(mh, "mul"))
+    end
+
+    test "generates docs with private functions" do
+      let out = setup_and_generate("priv", Cons(
+        ("priv_mod.march", "mod PrivMod do\n\nfn public_fn() do 1 end\n\npfn private_fn() do 2 end\n\nend"), Nil), true)
+      let html = read_file(out ++ "/PrivMod.html")
+      assert (String.contains(html, "public_fn"))
+      assert (String.contains(html, "private_fn"))
+      assert (String.contains(html, "Private"))
+      assert (String.contains(html, "bfn"))
+      assert (String.contains(html, "bpfn"))
+    end
+
+    test "generates sidebar links across modules" do
+      let out = setup_and_generate("sidebar", Cons(
+        ("alpha.march", "mod Alpha do\nfn a() do 1 end\nend"),
+        Cons(("beta.march", "mod Beta do\nfn b() do 2 end\nend"), Nil)), false)
+      let html = read_file(out ++ "/Alpha.html")
+      assert (String.contains(html, "Alpha.html"))
+      assert (String.contains(html, "Beta.html"))
+      assert (String.contains(html, "class=\"sl\""))
+    end
+
+  end
+
+  describe "doc strings and markdown" do
+
+    test "triple-quoted doc with code fence" do
+      let out = setup_and_generate("tripdoc", Cons(
+        ("doc_mod.march", "mod DocMod do\n\ndoc \"\"\"\nThis function does something.\n\n## Examples\n\n```\nDocMod.greet()\n```\n\"\"\"\nfn greet() do \"hi\" end\n\nend"), Nil), false)
+      let html = read_file(out ++ "/DocMod.html")
+      assert (String.contains(html, "This function does something"))
+      assert (String.contains(html, "<pre><code>"))
+      assert (String.contains(html, "DocMod.greet()"))
+      assert (String.contains(html, "<h3>"))
+    end
+
+    test "HTML special chars are escaped in doc strings" do
+      let out = setup_and_generate("esc", Cons(
+        ("esc_mod.march", "mod EscMod do\n\ndoc \"\"\"\nUse `<div>` tags & `\"quotes\"`.\n\"\"\"\nfn render() do \"html\" end\n\nend"), Nil), false)
+      let html = read_file(out ++ "/EscMod.html")
+      assert (String.contains(html, "<code>"))
+      assert (String.contains(html, "&amp;"))
+    end
+
+  end
+
+  describe "edge cases" do
+
+    test "empty source directory" do
+      let out = setup_and_generate("empty", Nil, false)
+      let idx = read_file(out ++ "/index.html")
+      assert (String.contains(idx, "0 modules"))
+    end
+
+    test "module with no comment" do
+      let out = setup_and_generate("nocomm", Cons(
+        ("bare.march", "mod Bare do\nfn f() do 1 end\nend"), Nil), false)
+      let idx = read_file(out ++ "/index.html")
+      assert (String.contains(idx, "Bare"))
+      assert (String.contains(idx, "1 functions"))
+      let html = read_file(out ++ "/Bare.html")
+      assert (String.contains(html, "Bare"))
+    end
+
+    test "module with only types" do
+      let out = setup_and_generate("onlytype", Cons(
+        ("only_type.march", "mod OnlyType do\n\ntype Color = Red | Blue\n\ntype Shape = Circle\n\nend"), Nil), false)
+      let html = read_file(out ++ "/OnlyType.html")
+      assert (String.contains(html, "Types"))
+      assert (String.contains(html, "Color"))
+      assert (String.contains(html, "Shape"))
+    end
+
+    test "module with only private functions" do
+      let out = setup_and_generate("onlypriv", Cons(
+        ("only_priv.march", "mod OnlyPriv do\n\npfn secret() do 1 end\n\npfn hidden() do 2 end\n\nend"), Nil), true)
+      let html = read_file(out ++ "/OnlyPriv.html")
+      assert (String.contains(html, "Private"))
+      assert (String.contains(html, "secret"))
+      assert (String.contains(html, "hidden"))
+    end
+
+    test "module with interface" do
+      let out = setup_and_generate("iface", Cons(
+        ("iface_mod.march", "mod IfaceMod do\n\ninterface Comparable do\n  fn compare(self, other) : Int\nend\n\nfn helper() do 1 end\n\nend"), Nil), false)
+      let html = read_file(out ++ "/IfaceMod.html")
+      assert (String.contains(html, "Interfaces"))
+      assert (String.contains(html, "Comparable"))
+      assert (String.contains(html, "bif"))
+    end
+
+    test "module with ptype" do
+      let out = setup_and_generate("ptype", Cons(
+        ("ptype_mod.march", "mod PtypeMod do\n\nptype Internal = X | Y\n\ntype Public = A | B\n\nend"), Nil), false)
+      let html = read_file(out ++ "/PtypeMod.html")
+      assert (String.contains(html, "Internal"))
+      assert (String.contains(html, "Public"))
+      assert (String.contains(html, "Types"))
+    end
+
+    test "multiple source directories" do
+      let src1 = "/tmp/march_doc_integ_msrc1_v2"
+      let src2 = "/tmp/march_doc_integ_msrc2_v2"
+      let out = "/tmp/march_doc_integ_mout_v2"
+      match Dir.mkdir_p(src1) do Err(_) -> () | Ok(_) -> () end
+      match Dir.mkdir_p(src2) do Err(_) -> () | Ok(_) -> () end
+      match File.write(src1 ++ "/a.march", "mod ModA do\nfn a() do 1 end\nend") do Ok(_) -> () | Err(_) -> () end
+      match File.write(src2 ++ "/b.march", "mod ModB do\nfn b() do 2 end\nend") do Ok(_) -> () | Err(_) -> () end
+      MarchDoc.generate(Cons(src1, Cons(src2, Nil)), out, false)
+      let idx = read_file(out ++ "/index.html")
+      assert (String.contains(idx, "ModA"))
+      assert (String.contains(idx, "ModB"))
+    end
+
+    test "complete page structure" do
+      let out = setup_and_generate("full", Cons(
+        ("full.march", "-- Full module with all features.\nmod FullMod do\n\ntype Status = Active | Inactive\n\ndoc \"Get status\"\nfn get_status() : Status do Active end\n\npfn internal_helper() do 42 end\n\nend"), Nil), true)
+      let html = read_file(out ++ "/FullMod.html")
+      assert (String.contains(html, "<!DOCTYPE html>"))
+      assert (String.contains(html, "<style>"))
+      assert (String.contains(html, "<script>"))
+      assert (String.contains(html, "id=\"sb\""))
+      assert (String.contains(html, "id=\"main\""))
+      assert (String.contains(html, "Types"))
+      assert (String.contains(html, "Functions"))
+      assert (String.contains(html, "Private"))
+      assert (String.contains(html, "mdoc"))
+      assert (String.contains(html, "Status"))
+      assert (String.contains(html, "get_status"))
+      assert (String.contains(html, "internal_helper"))
+      assert (String.contains(html, "Get status"))
+    end
+
+    test "index blurb from module comment" do
+      let out = setup_and_generate("blurb", Cons(
+        ("cool.march", "-- This is a cool module for testing.\nmod CoolMod do\nfn cool() do 42 end\nend"), Nil), false)
+      let idx = read_file(out ++ "/index.html")
+      assert (String.contains(idx, "cool module for testing"))
+    end
+
+  end
+
+end
+
+end

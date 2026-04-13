@@ -1,0 +1,269 @@
+-- ExDoc.Parser — extract doc entries from March source files.
+
+mod Parser do
+
+-- ── Types ────────────────────────────────────────────────────────────────────
+
+-- FnEntry(name, signature, doc, is_private)
+type FnEntry = FnEntry(String, String, Option(String), Bool)
+
+-- TypeEntry(name, signature, doc)
+type TypeEntry = TypeEntry(String, String, Option(String))
+
+-- IfaceEntry(name, signature, doc, methods)
+type IfaceEntry = IfaceEntry(String, String, Option(String), List((String, String)))
+
+-- ModuleInfo(name, comment, fns, types, ifaces)
+type ModuleInfo = ModuleInfo(String, Option(String), List(FnEntry), List(TypeEntry), List(IfaceEntry))
+
+-- ── Accessors ────────────────────────────────────────────────────────────────
+
+fn info_name(m : ModuleInfo) : String do
+  match m do
+  ModuleInfo(n, _, _, _, _) -> n
+  end
+end
+
+fn entry_priv(e : FnEntry) : Bool do
+  match e do
+  FnEntry(_, _, _, p) -> p
+  end
+end
+
+fn is_pub(e : FnEntry) : Bool do !entry_priv(e) end
+fn is_prv(e : FnEntry) : Bool do entry_priv(e) end
+
+-- ── Internal helpers ─────────────────────────────────────────────────────────
+
+pfn drop_prefix(s, prefix) do
+  String.slice(s, String.byte_size(prefix), String.byte_size(s) - String.byte_size(prefix))
+end
+
+pfn drop_suffix(s, suffix) do
+  String.slice(s, 0, String.byte_size(s) - String.byte_size(suffix))
+end
+
+-- Extract the module name from "mod Name do" (first occurrence).
+pfn parse_module_name(lines) do
+  fn go(ls) do
+    match ls do
+    Nil -> "Unknown"
+    Cons(line, rest) ->
+      do
+        let t = String.trim(line)
+        if String.starts_with(t, "mod ") && String.ends_with(t, " do") do
+          String.trim(drop_suffix(drop_prefix(t, "mod "), " do"))
+        else go(rest) end
+      end
+    end
+  end
+  go(lines)
+end
+
+-- Collect leading "--" comment block before any non-comment code.
+pfn parse_module_comment(lines) do
+  fn go(ls, acc) do
+    match ls do
+    Nil ->
+      if List.is_empty(acc) do None
+      else Some(String.trim(String.join(List.reverse(acc), "\n"))) end
+    Cons(line, rest) ->
+      do
+        let t = String.trim(line)
+        if String.starts_with(t, "--") do
+          let text =
+            if String.byte_size(t) > 2 && String.slice(t, 2, 1) == " " do
+              String.slice(t, 3, String.byte_size(t) - 3)
+            else String.slice(t, 2, String.byte_size(t) - 2) end
+          go(rest, Cons(text, acc))
+        else
+          if String.is_empty(t) do go(rest, Cons("", acc))
+          else
+            if List.is_empty(acc) do None
+            else Some(String.trim(String.join(List.reverse(acc), "\n"))) end
+          end
+        end
+      end
+    end
+  end
+  go(lines, Nil)
+end
+
+-- Extract the doc text from a single-line: doc "text"
+pfn extract_single_doc(line) do
+  let t = String.trim(line)
+  match String.split_first(t, "\"") do
+  None -> ""
+  Some((_, after)) ->
+    match String.split_first(after, "\"") do
+    None -> after
+    Some((content, _)) -> content
+    end
+  end
+end
+
+-- Collect triple-quoted doc lines until closing """
+pfn collect_triple_doc(lines) do
+  fn go(ls, acc) do
+    match ls do
+    Nil -> (String.trim(String.join(List.reverse(acc), "\n")), Nil)
+    Cons(line, rest) ->
+      do
+        let t = String.trim(line)
+        if String.contains(t, "\"\"\"") do
+          (String.trim(String.join(List.reverse(acc), "\n")), rest)
+        else
+          go(rest, Cons(line, acc))
+        end
+      end
+    end
+  end
+  go(lines, Nil)
+end
+
+-- Strip a known keyword prefix from a declaration line.
+pfn strip_kw(t) do
+  if String.starts_with(t, "pfn ") do drop_prefix(t, "pfn ")
+  else
+    if String.starts_with(t, "fn ") do drop_prefix(t, "fn ")
+    else
+      if String.starts_with(t, "ptype ") do drop_prefix(t, "ptype ")
+      else
+        if String.starts_with(t, "type ") do drop_prefix(t, "type ")
+        else
+          if String.starts_with(t, "interface ") do drop_prefix(t, "interface ")
+          else t end
+        end
+      end
+    end
+  end
+end
+
+-- Extract function/type signature: strip keyword prefix and trailing " do".
+pfn extract_sig(line) do
+  let t = String.trim(line)
+  let t = strip_kw(t)
+  let t = if String.ends_with(t, " do") do drop_suffix(t, " do") else t end
+  String.trim(t)
+end
+
+-- Extract the name part from a declaration (up to first '(' ':' '=' or space).
+pfn decl_name(decl) do
+  fn go(i, n) do
+    if i >= n do decl
+    else
+      let ch = String.slice(decl, i, 1)
+      if ch == "(" do String.slice(decl, 0, i)
+      else
+        if ch == ":" do String.slice(decl, 0, i)
+        else
+          if ch == "=" do String.slice(decl, 0, i)
+          else
+            if ch == " " do String.slice(decl, 0, i)
+            else go(i + 1, n) end
+          end
+        end
+      end
+    end
+  end
+  go(0, String.byte_size(decl))
+end
+
+-- Only declarations at column 0 are module-level (not nested helpers).
+pfn is_toplevel(line) do
+  if String.is_empty(line) do false
+  else
+    let ch = String.slice(line, 0, 1)
+    ch != " " && ch != "\t"
+  end
+end
+
+pfn process_line(line, pending, fns, types, ifaces, include_private) do
+  let t = String.trim(line)
+  if String.is_empty(t) do (pending, fns, types, ifaces, Nil)
+  else
+    if String.starts_with(t, "--") do (pending, fns, types, ifaces, Nil)
+    else
+      if String.starts_with(t, "doc \"") do
+        let doc_text = extract_single_doc(t)
+        (Some(doc_text), fns, types, ifaces, Nil)
+      else
+        if String.starts_with(t, "fn ") && is_toplevel(line) do
+          let dsig = extract_sig(line)
+          let name = decl_name(dsig)
+          (None, Cons(FnEntry(name, dsig, pending, false), fns), types, ifaces, Nil)
+        else
+          if String.starts_with(t, "pfn ") && include_private && is_toplevel(line) do
+            let dsig = extract_sig(line)
+            let name = decl_name(dsig)
+            (None, Cons(FnEntry(name, dsig, pending, true), fns), types, ifaces, Nil)
+          else
+            if String.starts_with(t, "type ") do
+              let dsig = extract_sig(line)
+              let name = decl_name(dsig)
+              (None, fns, Cons(TypeEntry(name, dsig, pending), types), ifaces, Nil)
+            else
+              if String.starts_with(t, "ptype ") do
+                let dsig = extract_sig(line)
+                let name = decl_name(dsig)
+                (None, fns, Cons(TypeEntry(name, "ptype " ++ dsig, pending), types), ifaces, Nil)
+              else
+                if String.starts_with(t, "interface ") do
+                  let dsig = extract_sig(line)
+                  let name = decl_name(dsig)
+                  (None, fns, types, Cons(IfaceEntry(name, dsig, pending, Nil), ifaces), Nil)
+                else
+                  (None, fns, types, ifaces, Nil)
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+-- Walk lines extracting doc + fn/type/interface entries.
+pfn parse_entries(lines, include_private) do
+  fn go(ls, pending, fns, types, ifaces) do
+    match ls do
+    Nil ->
+      (List.reverse(fns), List.reverse(types), List.reverse(ifaces))
+    Cons(line, rest) ->
+      do
+        let t = String.trim(line)
+        if String.starts_with(t, "doc \"\"\"") do
+          let (doc_text, rest2) = collect_triple_doc(rest)
+          go(rest2, Some(doc_text), fns, types, ifaces)
+        else
+          let (pending2, fns2, types2, ifaces2, _) =
+            process_line(line, pending, fns, types, ifaces, include_private)
+          go(rest, pending2, fns2, types2, ifaces2)
+        end
+      end
+    end
+  end
+  go(lines, None, Nil, Nil, Nil)
+end
+
+-- Parse a .march file into a ModuleInfo (or None if unparseable).
+fn parse_file(path : String, include_private : Bool) : Option(ModuleInfo) do
+  match File.read(path) do
+  Err(_) -> None
+  Ok(src) ->
+    do
+      let lines = String.split(src, "\n")
+      let mod_name = parse_module_name(lines)
+      let mod_comment = parse_module_comment(lines)
+      let (fns, types, ifaces) = parse_entries(lines, include_private)
+      if mod_name == "Unknown" && List.is_empty(fns) && List.is_empty(types) do
+        None
+      else
+        Some(ModuleInfo(mod_name, mod_comment, fns, types, ifaces))
+      end
+    end
+  end
+end
+
+end

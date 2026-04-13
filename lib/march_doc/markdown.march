@@ -1,0 +1,110 @@
+-- ExDoc.Markdown — convert doc-string markdown to HTML.
+
+mod Markdown do
+
+-- ── Utilities ────────────────────────────────────────────────────────────────
+
+fn html_escape(s : String) : String do
+  let s = String.replace_all(s, "&", "&amp;")
+  let s = String.replace_all(s, "<", "&lt;")
+  let s = String.replace_all(s, ">", "&gt;")
+  let s = String.replace_all(s, "\"", "&quot;")
+  s
+end
+
+fn drop_prefix(s : String, prefix : String) : String do
+  String.slice(s, String.byte_size(prefix), String.byte_size(s) - String.byte_size(prefix))
+end
+
+fn drop_suffix(s : String, suffix : String) : String do
+  String.slice(s, 0, String.byte_size(s) - String.byte_size(suffix))
+end
+
+-- ── Inline rendering ─────────────────────────────────────────────────────────
+
+fn render_inline(text : String) : String do
+  fn go(s, out) do
+    match String.split_first(s, "`") do
+    None -> List.reverse(Cons(html_escape(s), out))
+    Some((before, after)) ->
+      match String.split_first(after, "`") do
+      None -> List.reverse(Cons(html_escape(s), out))
+      Some((code, rest)) ->
+        go(rest, Cons("</code>", Cons(html_escape(code), Cons("<code>", Cons(html_escape(before), out)))))
+      end
+    end
+  end
+  String.join(go(text, Nil), "")
+end
+
+-- ── Block-level markdown ─────────────────────────────────────────────────────
+
+pfn flush_para(buf, out) do
+  if List.is_empty(buf) do out
+  else
+    let text = render_inline(String.join(List.reverse(buf), " "))
+    Cons("</p>", Cons(text, Cons("<p>", out)))
+  end
+end
+
+pfn flush_code(buf, out) do
+  let code = html_escape(String.join(List.reverse(buf), "\n"))
+  Cons("</code></pre>", Cons(code, out))
+end
+
+pfn is_fence(t) do
+  String.byte_size(t) >= 3 && String.slice(t, 0, 3) == "```"
+end
+
+pfn md_step_code(line, rest, buf, out, go) do
+  let t = String.trim(line)
+  if t == "```" do go(rest, Nil, flush_code(buf, out), false)
+  else go(rest, Cons(line, buf), out, true) end
+end
+
+pfn md_heading(t) do
+  if String.starts_with(t, "### ") do Some(("<h4>", drop_prefix(t, "### ")))
+  else
+    if String.starts_with(t, "## ") do Some(("<h3>", drop_prefix(t, "## ")))
+    else
+      if String.starts_with(t, "# ") do Some(("<h3>", drop_prefix(t, "# ")))
+      else None end
+    end
+  end
+end
+
+pfn md_step_text(line, rest, buf, out, go) do
+  let t = String.trim(line)
+  if is_fence(t) do go(rest, Nil, Cons("<pre><code>", flush_para(buf, out)), true)
+  else
+    if String.is_empty(t) do go(rest, Nil, flush_para(buf, out), false)
+    else
+      match md_heading(t) do
+      Some((tag, content)) ->
+        let close = String.replace_all(tag, "<", "</")
+        let flushed = flush_para(buf, out)
+        let hnode = Cons(close, Cons(html_escape(content), Cons(tag, flushed)))
+        go(rest, Nil, hnode, false)
+      None ->
+        go(rest, Cons(t, buf), out, false)
+      end
+    end
+  end
+end
+
+fn md_to_html(md : String) : String do
+  let lines = String.split(md, "\n")
+  fn go(ls, buf, out, code_mode) do
+    match ls do
+    Nil ->
+      let out2 = if code_mode do flush_code(buf, out) else flush_para(buf, out) end
+      String.join(List.reverse(out2), "")
+    Cons(line, rest) ->
+      if code_mode do md_step_code(line, rest, buf, out, go)
+      else md_step_text(line, rest, buf, out, go) end
+    end
+  end
+  go(lines, Nil, Nil, false)
+end
+
+end

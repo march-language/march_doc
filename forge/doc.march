@@ -1,0 +1,125 @@
+-- march_doc.doc task — entry point invoked by `forge march_doc.doc`.
+--
+-- Reads FORGE_TASK_ARGS for flags, discovers the current project's
+-- source directories from forge.toml, and generates HTML docs.
+
+mod MarchDocTask do
+
+-- ── Arg parsing ──────────────────────────────────────────────────────────────
+
+pfn parse_args() do
+  let raw = match System.env("FORGE_TASK_ARGS") do
+    None -> ""
+    Some(s) -> s
+  end
+  let parts = List.filter(String.split(raw, "\n"), fn s -> !String.is_empty(s))
+  fn go(ls, output, private, stdlib) do
+    match ls do
+    Nil -> (output, private, stdlib)
+    Cons(arg, rest) ->
+      if arg == "--private" do go(rest, output, true, stdlib)
+      else
+        if arg == "--stdlib" do go(rest, output, private, true)
+        else
+          if arg == "-o" do
+            match rest do
+            Cons(val, rest2) -> go(rest2, val, private, stdlib)
+            Nil -> go(Nil, output, private, stdlib)
+            end
+          else
+            if arg == "--output" do
+              match rest do
+              Cons(val, rest2) -> go(rest2, val, private, stdlib)
+              Nil -> go(Nil, output, private, stdlib)
+              end
+            else go(rest, output, private, stdlib) end
+          end
+        end
+      end
+    end
+  end
+  go(parts, "doc", false, false)
+end
+
+-- ── Project discovery ────────────────────────────────────────────────────────
+
+-- Walk up from cwd to find forge.toml, return the directory containing it.
+pfn find_project_root() do
+  fn go(dir) do
+    let candidate = dir ++ "/forge.toml"
+    if File.exists(candidate) do Some(dir)
+    else
+      let parent = String.join(
+        List.reverse(List.tail(List.reverse(String.split(dir, "/")))),
+        "/"
+      )
+      if String.is_empty(parent) do None
+      else go("/" ++ parent) end
+    end
+  end
+  go(System.cwd())
+end
+
+-- Find the stdlib directory relative to the march binary.
+pfn find_stdlib_dir() do
+  let candidates = [
+    "stdlib",
+    "../stdlib",
+    "../../stdlib",
+    "../../../stdlib"
+  ]
+  fn go(ls) do
+    match ls do
+    Nil -> None
+    Cons(c, rest) ->
+      if Dir.exists(c) do Some(c)
+      else go(rest) end
+    end
+  end
+  go(candidates)
+end
+
+-- Discover source directories from a project root (src/ and lib/).
+pfn project_src_dirs(root) do
+  let candidates = [root ++ "/src", root ++ "/lib"]
+  List.filter(candidates, Dir.exists)
+end
+
+-- ── Main ─────────────────────────────────────────────────────────────────────
+
+fn main() do
+  let (output_dir, include_private, stdlib_only) = parse_args()
+
+  let dirs = if stdlib_only do
+    match find_stdlib_dir() do
+    None ->
+      IO.warn("march_doc: stdlib directory not found")
+      System.exit(1)
+      Nil
+    Some(d) -> [d]
+    end
+  else
+    match find_project_root() do
+    None ->
+      IO.warn("march_doc: no forge.toml found (run from a March project)")
+      System.exit(1)
+      Nil
+    Some(root) ->
+      let src = project_src_dirs(root)
+      let stdlib = match find_stdlib_dir() do
+        None -> Nil
+        Some(d) -> [d]
+      end
+      List.append(src, stdlib)
+    end
+  end
+
+  if List.is_empty(dirs) do
+    IO.warn("march_doc: no source directories found")
+    System.exit(1)
+  else () end
+
+  MarchDoc.generate(dirs, output_dir, include_private)
+end
+
+end

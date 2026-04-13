@@ -1,0 +1,149 @@
+-- Tests for the Discovery module.
+
+mod TestDiscovery do
+
+pfn mkdirs() do
+  let dirs = Cons("/tmp/march_doc_disco_flat", Cons("/tmp/march_doc_disco_nested/sub", Cons("/tmp/march_doc_disco_deep/a/b/c", Cons("/tmp/march_doc_disco_multi/src", Cons("/tmp/march_doc_disco_multi/lib", Cons("/tmp/march_doc_disco_3lev/a/b", Cons("/tmp/march_doc_disco_emptydir", Nil)))))))
+  List.each(dirs, fn d -> match Dir.mkdir_p(d) do Ok(_) -> () | Err(_) -> () end)
+end
+
+pfn mkfiles() do
+  let files = Cons(("/tmp/march_doc_disco_flat/a.march", "mod A do end"), Cons(("/tmp/march_doc_disco_flat/b.march", "mod B do end"), Cons(("/tmp/march_doc_disco_flat/readme.txt", "not march"), Cons(("/tmp/march_doc_disco_flat/notes.md", "# notes"), Cons(("/tmp/march_doc_disco_flat/data.json", "{}"), Cons(("/tmp/march_doc_disco_nested/top.march", "mod Top do end"), Cons(("/tmp/march_doc_disco_nested/sub/nested.march", "mod Nested do end"), Cons(("/tmp/march_doc_disco_deep/a/b/c/deep.march", "mod Deep do end"), Cons(("/tmp/march_doc_disco_multi/src/app.march", "mod App do end"), Cons(("/tmp/march_doc_disco_multi/lib/util.march", "mod Util do end"), Cons(("/tmp/march_doc_disco_multi/lib/helper.march", "mod Helper do end"), Cons(("/tmp/march_doc_disco_3lev/e.march", "mod E do end"), Cons(("/tmp/march_doc_disco_3lev/a/d.march", "mod D do end"), Cons(("/tmp/march_doc_disco_3lev/a/b/c.march", "mod C do end"), Nil))))))))))))))
+  List.each(files, fn pair -> match pair do (path, content) -> match File.write(path, content) do Ok(_) -> () | Err(_) -> () end end)
+end
+
+pfn has_file(files, name) do
+  List.any(files, fn f -> String.ends_with(f, name))
+end
+
+describe "Discovery" do
+
+  describe "walk_march_files" do
+
+    test "setup fixtures" do
+      mkdirs()
+      mkfiles()
+      assert true
+    end
+
+    test "returns empty list for non-existent directory" do
+      let r = Discovery.walk_march_files("/tmp/march_doc_disco_nodir_xyz")
+      assert (r == Nil)
+      assert (List.is_empty(r))
+      assert (List.length(r) == 0)
+    end
+
+    test "multiple non-existent dirs all return Nil" do
+      let r1 = Discovery.walk_march_files("/tmp/no_such_dir_abc123")
+      let r2 = Discovery.walk_march_files("/tmp/no_such_dir_def456")
+      assert (r1 == Nil)
+      assert (r2 == Nil)
+      assert (List.is_empty(r1))
+      assert (List.is_empty(r2))
+    end
+
+    test "finds march files in a flat directory" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_flat")
+      assert (has_file(files, "a.march"))
+      assert (has_file(files, "b.march"))
+      assert (has_file(files, "readme.txt") == false)
+      assert (has_file(files, "notes.md") == false)
+      assert (has_file(files, "data.json") == false)
+      let all_march = List.all(files, fn f -> String.ends_with(f, ".march"))
+      assert (all_march)
+      assert (List.length(files) >= 2)
+    end
+
+    test "recursively finds files in subdirectories" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_nested")
+      assert (has_file(files, "top.march"))
+      assert (has_file(files, "nested.march"))
+      assert (List.length(files) >= 2)
+      let all_march = List.all(files, fn f -> String.ends_with(f, ".march"))
+      assert (all_march)
+    end
+
+    test "deeply nested directories" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_deep")
+      assert (has_file(files, "deep.march"))
+      assert (List.length(files) >= 1)
+      let first = match List.head_opt(files) do None -> "" | Some(f) -> f end
+      assert (String.contains(first, "/a/b/c/"))
+      assert (String.ends_with(first, ".march"))
+    end
+
+    test "multiple files across multiple subdirs" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_multi")
+      assert (has_file(files, "app.march"))
+      assert (has_file(files, "util.march"))
+      assert (has_file(files, "helper.march"))
+      assert (List.length(files) >= 3)
+    end
+
+    test "nested three levels" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_3lev")
+      assert (has_file(files, "c.march"))
+      assert (has_file(files, "d.march"))
+      assert (has_file(files, "e.march"))
+      assert (List.length(files) >= 3)
+    end
+
+    test "empty directory returns empty list" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_emptydir")
+      assert (List.is_empty(files))
+      assert (List.length(files) == 0)
+    end
+
+    test "returns full paths starting with root" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_flat")
+      let first = match List.head_opt(files) do None -> "" | Some(f) -> f end
+      assert (String.starts_with(first, "/tmp/"))
+      assert (String.ends_with(first, ".march"))
+      assert (String.contains(first, "march_doc_disco_flat"))
+      assert (String.byte_size(first) > 10)
+    end
+
+    test "paths contain directory structure" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_nested")
+      let nested = List.filter(files, fn f -> String.contains(f, "/sub/"))
+      assert (List.length(nested) >= 1)
+      let top = List.filter(files, fn f -> String.ends_with(f, "top.march"))
+      assert (List.length(top) >= 1)
+    end
+
+    test "all returned files end with .march" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_multi")
+      let non_march = List.filter(files, fn f -> !String.ends_with(f, ".march"))
+      assert (List.is_empty(non_march))
+      assert (List.length(files) == List.length(List.filter(files, fn f -> String.ends_with(f, ".march"))))
+    end
+
+    test "has_file helper positive and negative" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_flat")
+      assert (has_file(files, "a.march") == true)
+      assert (has_file(files, "b.march") == true)
+      assert (has_file(files, "nonexistent.march") == false)
+      assert (has_file(files, ".txt") == false)
+      assert (has_file(files, "readme") == false)
+    end
+
+    test "flat dir paths contain dir name" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_flat")
+      let all_contain = List.all(files, fn f -> String.contains(f, "march_doc_disco_flat"))
+      assert (all_contain)
+    end
+
+    test "deep dir path contains full nesting" do
+      let files = Discovery.walk_march_files("/tmp/march_doc_disco_deep")
+      let first = match List.head_opt(files) do None -> "" | Some(f) -> f end
+      assert (String.contains(first, "march_doc_disco_deep"))
+      assert (String.contains(first, "/a/"))
+      assert (String.contains(first, "/b/"))
+      assert (String.contains(first, "/c/"))
+    end
+
+  end
+
+end
+
+end

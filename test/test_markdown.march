@@ -1,0 +1,407 @@
+-- Tests for the Markdown module.
+
+mod TestMarkdown do
+
+describe "Markdown" do
+
+  describe "html_escape" do
+
+    test "escapes ampersand" do
+      assert (Markdown.html_escape("a & b") == "a &amp; b")
+    end
+
+    test "escapes angle brackets" do
+      assert (Markdown.html_escape("<div>") == "&lt;div&gt;")
+    end
+
+    test "escapes double quotes" do
+      assert (Markdown.html_escape("say \"hi\"") == "say &quot;hi&quot;")
+    end
+
+    test "no-op for plain text" do
+      assert (Markdown.html_escape("hello world") == "hello world")
+    end
+
+    test "escapes all special chars together" do
+      assert (Markdown.html_escape("<a href=\"x\">&") == "&lt;a href=&quot;x&quot;&gt;&amp;")
+    end
+
+  end
+
+  describe "drop_prefix" do
+
+    test "removes prefix" do
+      assert (Markdown.drop_prefix("fn foo()", "fn ") == "foo()")
+    end
+
+    test "removes full string" do
+      assert (Markdown.drop_prefix("abc", "abc") == "")
+    end
+
+    test "removes single char prefix" do
+      assert (Markdown.drop_prefix("xhello", "x") == "hello")
+    end
+
+  end
+
+  describe "drop_suffix" do
+
+    test "removes suffix" do
+      assert (Markdown.drop_suffix("foo do", " do") == "foo")
+    end
+
+    test "removes full string" do
+      assert (Markdown.drop_suffix("end", "end") == "")
+    end
+
+    test "removes single char suffix" do
+      assert (Markdown.drop_suffix("hello!", "!") == "hello")
+    end
+
+  end
+
+  describe "render_inline" do
+
+    test "plain text passes through escaped" do
+      assert (Markdown.render_inline("hello world") == "hello world")
+    end
+
+    test "single backtick pair renders code" do
+      assert (Markdown.render_inline("use `foo` here") == "use <code>foo</code> here")
+    end
+
+    test "multiple backtick pairs" do
+      let result = Markdown.render_inline("`a` and `b`")
+      assert (String.contains(result, "<code>a</code>"))
+      assert (String.contains(result, "<code>b</code>"))
+    end
+
+    test "unmatched backtick passes through" do
+      let result = Markdown.render_inline("it`s fine")
+      assert (String.contains(result, "it"))
+    end
+
+    test "escapes HTML inside code spans" do
+      assert (Markdown.render_inline("`<div>`") == "<code>&lt;div&gt;</code>")
+    end
+
+  end
+
+  describe "md_to_html" do
+
+    test "empty string returns empty" do
+      assert (Markdown.md_to_html("") == "")
+    end
+
+    test "single paragraph" do
+      let result = Markdown.md_to_html("Hello world")
+      assert (String.contains(result, "<p>"))
+      assert (String.contains(result, "Hello world"))
+      assert (String.contains(result, "</p>"))
+    end
+
+    test "two paragraphs separated by blank line" do
+      let result = Markdown.md_to_html("First\n\nSecond")
+      assert (String.contains(result, "First"))
+      assert (String.contains(result, "Second"))
+    end
+
+    test "code fence renders pre/code" do
+      let md = "Text\n\n```\ncode here\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<pre><code>"))
+      assert (String.contains(result, "code here"))
+      assert (String.contains(result, "</code></pre>"))
+    end
+
+    test "code fence with language tag" do
+      let md = "```march\nlet x = 1\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<pre><code>"))
+      assert (String.contains(result, "let x = 1"))
+    end
+
+    test "h2 heading" do
+      let result = Markdown.md_to_html("## Examples")
+      assert (String.contains(result, "<h3>"))
+      assert (String.contains(result, "Examples"))
+      assert (String.contains(result, "</h3>"))
+    end
+
+    test "h3 heading" do
+      let result = Markdown.md_to_html("### Details")
+      assert (String.contains(result, "<h4>"))
+      assert (String.contains(result, "Details"))
+    end
+
+    test "h1 heading" do
+      let result = Markdown.md_to_html("# Title")
+      assert (String.contains(result, "<h3>"))
+      assert (String.contains(result, "Title"))
+    end
+
+    test "inline code in paragraph" do
+      let result = Markdown.md_to_html("Use `map` here")
+      assert (String.contains(result, "<code>map</code>"))
+    end
+
+    test "code inside fence is escaped" do
+      let md = "```\n<script>alert(1)</script>\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "&lt;script&gt;"))
+    end
+
+    test "mixed content: paragraph, heading, code" do
+      let md = "Description\n\n## Examples\n\n```\nx = 1\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<p>"))
+      assert (String.contains(result, "<h3>"))
+      assert (String.contains(result, "<pre><code>"))
+    end
+
+    test "multiple blank lines between paragraphs" do
+      let result = Markdown.md_to_html("Para one\n\n\nPara two")
+      assert (String.contains(result, "Para one"))
+      assert (String.contains(result, "Para two"))
+    end
+
+    test "heading after paragraph" do
+      let result = Markdown.md_to_html("Some text\n\n## Heading")
+      assert (String.contains(result, "<p>"))
+      assert (String.contains(result, "<h3>"))
+      assert (String.contains(result, "Heading"))
+    end
+
+    test "paragraph after heading" do
+      let result = Markdown.md_to_html("## Title\n\nSome content")
+      assert (String.contains(result, "<h3>"))
+      assert (String.contains(result, "<p>"))
+      assert (String.contains(result, "Some content"))
+    end
+
+    test "code fence with multiple lines" do
+      let md = "```\nline1\nline2\nline3\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "line1"))
+      assert (String.contains(result, "line2"))
+      assert (String.contains(result, "line3"))
+    end
+
+    test "heading escapes special characters" do
+      let result = Markdown.md_to_html("## A & B")
+      assert (String.contains(result, "A &amp; B"))
+    end
+
+    test "multi-line paragraph joins with space" do
+      let result = Markdown.md_to_html("Line one\nLine two")
+      assert (String.contains(result, "Line one"))
+      assert (String.contains(result, "Line two"))
+    end
+
+    test "only whitespace lines treated as blank" do
+      let result = Markdown.md_to_html("A\n   \nB")
+      assert (String.contains(result, "A"))
+      assert (String.contains(result, "B"))
+    end
+
+    test "code fence immediately at start" do
+      let md = "```\nhello\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<pre><code>"))
+      assert (String.contains(result, "hello"))
+    end
+
+    test "unclosed code fence flushes as code" do
+      let md = "```\nunclosed code"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "unclosed code"))
+    end
+
+    test "h3 heading closes tag properly" do
+      let result = Markdown.md_to_html("### Sub")
+      assert (String.contains(result, "<h4>"))
+      assert (String.contains(result, "</h4>"))
+      assert (String.contains(result, "Sub"))
+    end
+
+    test "text not a heading passes through as paragraph" do
+      let result = Markdown.md_to_html("Just normal text")
+      assert (String.contains(result, "<p>"))
+      assert (String.contains(result, "Just normal text"))
+      assert (String.contains(result, "</p>"))
+    end
+
+    test "three backticks not at start of line are not a fence" do
+      let result = Markdown.md_to_html("text ``` more text")
+      assert (String.contains(result, "text"))
+    end
+
+    test "empty code fence" do
+      let md = "```\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<pre><code>"))
+      assert (String.contains(result, "</code></pre>"))
+    end
+
+    test "heading with special chars" do
+      let result = Markdown.md_to_html("## <Hello> & \"World\"")
+      assert (String.contains(result, "&lt;Hello&gt;"))
+      assert (String.contains(result, "&amp;"))
+      assert (String.contains(result, "&quot;World&quot;"))
+    end
+
+    test "consecutive headings" do
+      let result = Markdown.md_to_html("## First\n\n### Second")
+      assert (String.contains(result, "<h3>"))
+      assert (String.contains(result, "<h4>"))
+      assert (String.contains(result, "First"))
+      assert (String.contains(result, "Second"))
+    end
+
+    test "code fence after heading" do
+      let md = "## Example\n\n```\ncode\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<h3>"))
+      assert (String.contains(result, "<pre><code>"))
+      assert (String.contains(result, "code"))
+    end
+
+    test "paragraph with inline code and special chars" do
+      let result = Markdown.md_to_html("Use `a < b` for comparison")
+      assert (String.contains(result, "<code>"))
+      assert (String.contains(result, "&lt;"))
+    end
+
+    test "hash without space is not a heading" do
+      let result = Markdown.md_to_html("#nospace")
+      assert (String.contains(result, "<p>"))
+      assert (String.contains(result, "#nospace"))
+      -- Should NOT be a heading
+      assert (String.contains(result, "<h3>") == false)
+      assert (String.contains(result, "<h4>") == false)
+    end
+
+    test "leading blank lines before text" do
+      let result = Markdown.md_to_html("\n\nActual text")
+      assert (String.contains(result, "Actual text"))
+      assert (String.contains(result, "<p>"))
+    end
+
+    test "trailing blank lines after text" do
+      let result = Markdown.md_to_html("Some text\n\n\n")
+      assert (String.contains(result, "Some text"))
+      assert (String.contains(result, "<p>"))
+    end
+
+    test "code fence with empty lines inside" do
+      let md = "```\n\nline after blank\n\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "line after blank"))
+      assert (String.contains(result, "<pre><code>"))
+    end
+
+    test "paragraph then code then paragraph" do
+      let md = "Before code\n\n```\ncode\n```\n\nAfter code"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "Before code"))
+      assert (String.contains(result, "<pre><code>"))
+      assert (String.contains(result, "After code"))
+    end
+
+    test "multiple code fences" do
+      let md = "```\nfirst\n```\n\n```\nsecond\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "first"))
+      assert (String.contains(result, "second"))
+    end
+
+    test "heading between paragraphs" do
+      let md = "Intro text\n\n## Middle heading\n\nConclusion text"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "Intro text"))
+      assert (String.contains(result, "<h3>"))
+      assert (String.contains(result, "Middle heading"))
+      assert (String.contains(result, "Conclusion text"))
+    end
+
+    test "render_inline with empty string" do
+      assert (Markdown.render_inline("") == "")
+    end
+
+    test "render_inline with only backticks no content" do
+      let result = Markdown.render_inline("``")
+      assert (String.contains(result, "<code>"))
+    end
+
+    test "render_inline with adjacent code spans" do
+      let result = Markdown.render_inline("`a``b`")
+      assert (String.contains(result, "<code>"))
+    end
+
+    test "render_inline escapes ampersand outside code" do
+      let result = Markdown.render_inline("A & B `code`")
+      assert (String.contains(result, "&amp;"))
+      assert (String.contains(result, "<code>code</code>"))
+    end
+
+    test "html_escape with empty string" do
+      assert (Markdown.html_escape("") == "")
+    end
+
+    test "html_escape with all special chars" do
+      let result = Markdown.html_escape("&<>\"")
+      assert (result == "&amp;&lt;&gt;&quot;")
+    end
+
+    test "drop_prefix with empty prefix" do
+      assert (Markdown.drop_prefix("hello", "") == "hello")
+    end
+
+    test "drop_suffix with empty suffix" do
+      assert (Markdown.drop_suffix("hello", "") == "hello")
+    end
+
+    test "md_to_html with only blank lines" do
+      assert (Markdown.md_to_html("\n\n\n") == "")
+    end
+
+    test "single line paragraph is wrapped" do
+      let result = Markdown.md_to_html("A single line.")
+      assert (String.contains(result, "<p>A single line.</p>"))
+    end
+
+    test "multiple lines join into single paragraph" do
+      let result = Markdown.md_to_html("Line A\nLine B\nLine C")
+      assert (String.contains(result, "<p>"))
+      assert (String.contains(result, "</p>"))
+      assert (String.contains(result, "Line A"))
+      assert (String.contains(result, "Line B"))
+      assert (String.contains(result, "Line C"))
+    end
+
+    test "code fence preserves internal newlines" do
+      let md = "```\na\nb\nc\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "a\nb\nc"))
+    end
+
+    test "md_to_html complex document" do
+      let md = "# Title\n\nFirst paragraph.\n\n## Section\n\nSecond paragraph with `code`.\n\n```\nfn main() do\n  42\nend\n```\n\n### Subsection\n\nFinal paragraph."
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<h3>"))
+      assert (String.contains(result, "Title"))
+      assert (String.contains(result, "First paragraph"))
+      assert (String.contains(result, "Section"))
+      assert (String.contains(result, "<code>code</code>"))
+      assert (String.contains(result, "<pre><code>"))
+      assert (String.contains(result, "fn main()"))
+      assert (String.contains(result, "<h4>"))
+      assert (String.contains(result, "Subsection"))
+      assert (String.contains(result, "Final paragraph"))
+    end
+
+  end
+
+end
+
+end
