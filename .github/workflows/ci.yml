@@ -10,21 +10,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-14
-            ocaml-compiler: 5.3.0
-          - os: ubuntu-24.04
-            ocaml-compiler: 5.3.0
+        os: [macos-14, ubuntu-24.04]
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up OCaml
-        uses: ocaml/setup-ocaml@v3
-        with:
-          ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
       - name: Install system dependencies
         run: |
@@ -42,22 +33,8 @@ jobs:
             sudo ldconfig
           fi
 
-      - name: Build March compiler
-        run: |
-          export OPAMSWITCH=${{ github.workspace }}
-          eval $(opam env)
-          git clone --depth 1 https://github.com/march-language/march.git /tmp/march
-          cd /tmp/march
-          opam install --deps-only -y .
-          dune build bin/main.exe forge/bin/main.exe
-          ln -s $(pwd)/_build/default/bin/main.exe $(pwd)/_build/default/bin/march
-          ln -s $(pwd)/_build/default/forge/bin/main.exe $(pwd)/_build/default/forge/bin/forge
-          echo "$(pwd)/_build/default/bin" >> $GITHUB_PATH
-          echo "$(pwd)/_build/default/forge/bin" >> $GITHUB_PATH
+      - name: Set up March
+        uses: march-language/setup-march@main
 
       - name: Run tests
-        run: |
-          export OPAMSWITCH=${{ github.workspace }}
-          eval $(opam env)
-          export MARCH_STDLIB=/tmp/march/stdlib
-          forge test --coverage
+        run: forge test --coverage
