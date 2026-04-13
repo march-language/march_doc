@@ -60,23 +60,40 @@ pfn find_project_root() do
   go(System.cwd())
 end
 
--- Find the stdlib directory relative to the march binary.
+-- Find the stdlib directory.
+-- Resolution order (mirrors the compiler):
+--   1. MARCH_STDLIB env var (explicit override)
+--   2. Relative to the march binary (bin/../stdlib, bin/../share/march/stdlib, etc.)
+--   3. CWD-relative fallback (stdlib)
 pfn find_stdlib_dir() do
-  let candidates = [
-    "stdlib",
-    "../stdlib",
-    "../../stdlib",
-    "../../../stdlib"
-  ]
-  fn go(ls) do
-    match ls do
-    Nil -> None
-    Cons(c, rest) ->
-      if Dir.exists(c) do Some(c)
-      else go(rest) end
-    end
+  -- 1. Explicit env override
+  match System.env("MARCH_STDLIB") do
+    Some(dir) -> if Dir.exists(dir) do Some(dir) else None end
+    None ->
+      -- 2. Resolve from the march executable location
+      let bin_dir = match List.head_opt(System.argv()) do
+        None -> ""
+        Some(exe) -> Path.dirname(exe)
+      end
+      let candidates = if String.is_empty(bin_dir) do
+        ["stdlib"]
+      else
+        [
+          Path.normalize(Path.join(bin_dir, "../stdlib")),
+          Path.normalize(Path.join(bin_dir, "../../stdlib")),
+          Path.normalize(Path.join(bin_dir, "../share/march/stdlib")),
+          Path.normalize(Path.join(bin_dir, "../share/march")),
+          "stdlib"
+        ]
+      end
+      fn go(ls) do
+        match ls do
+          Nil -> None
+          Cons(c, rest) -> if Dir.exists(c) do Some(c) else go(rest) end
+        end
+      end
+      go(candidates)
   end
-  go(candidates)
 end
 
 -- Discover source directories from a project root (src/ and lib/).
