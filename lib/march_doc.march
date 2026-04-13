@@ -38,6 +38,11 @@ fn generate(src_dirs : List(String), output_dir : String, include_private : Bool
     Err(_) -> IO.warn("march_doc: failed to write index.html")
     Ok(_) -> ()
   end
+  let search_json = SearchIndex.build(modules)
+  match File.write(output_dir ++ "/search-index.json", search_json) do
+    Err(_) -> IO.warn("march_doc: failed to write search-index.json")
+    Ok(_) -> ()
+  end
   IO.puts("march_doc: generated " ++ String.from_int(List.length(modules)) ++
     " module pages in " ++ output_dir ++ "/")
   IO.puts("  open " ++ output_dir ++ "/index.html")

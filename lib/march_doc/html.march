@@ -44,7 +44,19 @@ fn page_css() : String do
   ".copy-btn{position:absolute;top:7px;right:8px;background:var(--card);color:var(--dim);border:1px solid var(--bdr);border-radius:4px;padding:2px 8px;font-size:11px;font-family:-apple-system,sans-serif;cursor:pointer;opacity:0;transition:opacity .15s,color .15s,border-color .15s}" ++
   ".pre-wrap:hover .copy-btn{opacity:1}" ++
   ".copy-btn:hover{color:var(--text);border-color:#7c3aed}" ++
-  ".copy-btn.copied{color:var(--fn);border-color:var(--fn);opacity:1}"
+  ".copy-btn.copied{color:var(--fn);border-color:var(--fn);opacity:1}" ++
+  "#sr{max-height:calc(100vh - 120px);overflow-y:auto;display:none}" ++
+  "#sr.open{display:block}" ++
+  ".sr-item{display:flex;align-items:baseline;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;text-decoration:none;color:var(--text);font-size:13px}" ++
+  ".sr-item:hover{background:var(--card);text-decoration:none}" ++
+  ".sr-kind{font-size:9px;font-weight:700;letter-spacing:.05em;padding:1px 5px;border-radius:3px;text-transform:uppercase;flex-shrink:0;min-width:28px;text-align:center}" ++
+  ".sr-fn{background:#1d3557;color:var(--fn)}.sr-type{background:#0d3321;color:var(--ty)}" ++
+  ".sr-interface{background:#3a2a00;color:var(--if)}.sr-module{background:#2d1b4e;color:var(--acc)}" ++
+  ".sr-pfn{background:#1e2124;color:var(--prv)}.sr-ptype{background:#1a2416;color:#5a9a60}" ++
+  ".sr-name{color:var(--bright);font-family:monospace;font-weight:600;white-space:nowrap}" ++
+  ".sr-mod{color:var(--dim);font-size:11px;margin-left:auto;flex-shrink:0}" ++
+  ".sr-doc{color:var(--dim);font-size:11px;padding:0 8px 4px 41px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" ++
+  ".sr-sep{border-top:1px solid var(--bdr);margin:4px 0}"
 end
 
 -- ── JavaScript ───────────────────────────────────────────────────────────────
@@ -72,6 +84,89 @@ fn page_js() : String do
   "});"
 end
 
+pfn search_js() : String do
+  -- Cross-module search: loads search-index.json, fuzzy matches, renders results
+  "var SI=null;" ++
+  "fetch('search-index.json').then(function(r){return r.json();}).then(function(d){SI=d;}).catch(function(){});" ++
+
+  -- Levenshtein distance
+  "function ld(a,b){" ++
+  "if(!a.length)return b.length;if(!b.length)return a.length;" ++
+  "var m=[];for(var i=0;i<=b.length;i++)m[i]=[i];" ++
+  "for(var j=0;j<=a.length;j++)m[0][j]=j;" ++
+  "for(i=1;i<=b.length;i++)for(j=1;j<=a.length;j++){" ++
+  "m[i][j]=b[i-1]===a[j-1]?m[i-1][j-1]:Math.min(m[i-1][j-1]+1,m[i][j-1]+1,m[i-1][j]+1);" ++
+  "}return m[b.length][a.length];}" ++
+
+  -- Fuzzy scoring: returns 0 if no match
+  "function fs(q,t){" ++
+  "if(!t)return 0;var ql=q.toLowerCase(),tl=t.toLowerCase();" ++
+  -- Exact match
+  "if(tl===ql)return 10000;" ++
+  -- Starts with
+  "if(tl.indexOf(ql)===0)return 5000-tl.length;" ++
+  -- Substring
+  "var idx=tl.indexOf(ql);if(idx>0)return 3000-idx;" ++
+  -- Word boundary match (camelCase, snake_case)
+  "var words=tl.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/_/g,' ').split(' ');" ++
+  "for(var w=0;w<words.length;w++){if(words[w].indexOf(ql)===0)return 2000-w*100;}" ++
+  -- Levenshtein for short queries
+  "if(ql.length<=8&&tl.length<=40){var d=ld(ql,tl.substring(0,Math.max(ql.length+2,8)));" ++
+  "if(d<=Math.ceil(ql.length*0.35))return 1000-d*100;}" ++
+  "return 0;}" ++
+
+  -- Score an entry against a query
+  "function scoreEntry(q,e){" ++
+  "return Math.max(" ++
+  "fs(q,e.n)*4," ++     -- name match (highest weight)
+  "fs(q,e.s)*2," ++     -- signature match
+  "fs(q,e.m)*2," ++     -- module name match
+  "fs(q,e.d)" ++        -- doc string match (lowest weight)
+  ");}" ++
+
+  -- Render search results
+  "function renderSR(results){" ++
+  "var el=document.getElementById('sr');if(!el)return;" ++
+  "if(!results.length){el.className='';el.innerHTML='';return;}" ++
+  "el.className='open';var h='';" ++
+  "for(var i=0;i<results.length;i++){" ++
+  "var e=results[i].entry,k=e.k,href=e.m+'.html';" ++
+  "if(k==='fn'||k==='pfn')href+='#fn-'+encodeURIComponent(e.n);" ++
+  "else if(k==='type'||k==='ptype')href+='#type-'+encodeURIComponent(e.n);" ++
+  "else if(k==='interface')href+='#iface-'+encodeURIComponent(e.n);" ++
+  "var kc='sr-'+k;" ++
+  "h+='<a class=\"sr-item\" href=\"'+href+'\">'+" ++
+  "'<span class=\"sr-kind '+kc+'\">'+k+'</span>'+" ++
+  "'<span class=\"sr-name\">'+esc(e.n)+'</span>'+" ++
+  "'<span class=\"sr-mod\">'+esc(e.m)+'</span></a>';" ++
+  "if(e.d)h+='<div class=\"sr-doc\">'+esc(e.d.substring(0,100))+'</div>';" ++
+  "if(i<results.length-1)h+='<div class=\"sr-sep\"></div>';" ++
+  "}el.innerHTML=h;}" ++
+
+  -- HTML escape helper
+  "function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}" ++
+
+  -- Search handler
+  "var sq=document.getElementById('sq');" ++
+  "if(sq)sq.addEventListener('input',function(){" ++
+  "var q=this.value.trim();" ++
+  "if(!q||!SI){renderSR([]);return;}" ++
+  "var results=[];" ++
+  "for(var i=0;i<SI.length;i++){" ++
+  "var sc=scoreEntry(q,SI[i]);" ++
+  "if(sc>0)results.push({entry:SI[i],score:sc});" ++
+  "}" ++
+  "results.sort(function(a,b){return b.score-a.score;});" ++
+  "renderSR(results.slice(0,25));" ++
+  "});" ++
+
+  -- Close results on Escape
+  "document.addEventListener('keydown',function(e){" ++
+  "if(e.key==='Escape'){var el=document.getElementById('sr');if(el){el.className='';el.innerHTML='';}" ++
+  "var sq2=document.getElementById('sq');if(sq2)sq2.value='';}" ++
+  "});"
+end
+
 -- ── Page shell ───────────────────────────────────────────────────────────────
 
 fn page(title : String, sidebar : String, is_index : Bool, content : String) : String do
@@ -82,10 +177,11 @@ fn page(title : String, sidebar : String, is_index : Bool, content : String) : S
   "<style>" ++ page_css() ++ "</style></head><body>" ++
   "<nav id=\"sb\"><h1>March Docs</h1>" ++
   "<input id=\"sq\" type=\"search\" placeholder=\"Search&hellip;\" autocomplete=\"off\">" ++
+  "<div id=\"sr\"></div>" ++
   "<a href=\"index.html\"" ++ idx_cls ++ ">Overview</a>" ++
   sidebar ++
   "</nav><main id=\"main\">" ++ content ++ "</main>" ++
-  "<script>" ++ page_js() ++ "</script></body></html>"
+  "<script>" ++ page_js() ++ search_js() ++ "</script></body></html>"
 end
 
 fn sidebar_links(module_names : List(String)) : String do
