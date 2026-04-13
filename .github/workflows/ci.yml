@@ -49,7 +49,7 @@ jobs:
           git clone --depth 1 https://github.com/march-language/march.git /tmp/march
           cd /tmp/march
           opam install --deps-only -y .
-          dune build
+          dune build bin/main.exe forge/bin/main.exe
           ln -s $(pwd)/_build/default/bin/main.exe $(pwd)/_build/default/bin/march
           ln -s $(pwd)/_build/default/forge/bin/main.exe $(pwd)/_build/default/forge/bin/forge
           echo "$(pwd)/_build/default/bin" >> $GITHUB_PATH
