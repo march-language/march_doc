@@ -94,10 +94,10 @@ pfn find_stdlib_dir() do
   end
 end
 
--- Discover source directories from a project root (src/ and lib/).
+-- Discover the library directory from a project root.
 pfn project_src_dirs(root) do
-  let candidates = [root ++ "/src", root ++ "/lib"]
-  List.filter(candidates, Dir.exists)
+  let lib = root ++ "/lib"
+  if Dir.exists(lib) do [lib] else Nil end
 end
 
 -- ── Main ─────────────────────────────────────────────────────────────────────
