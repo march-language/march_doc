@@ -3,7 +3,6 @@
 -- Usage:
 --   forge march_doc.doc              generate docs for current project
 --   forge march_doc.doc -o DIR       set output directory (default: doc)
---   forge march_doc.doc --private    include private functions
 --   forge march_doc.doc --stdlib     generate docs for stdlib
 
 mod MarchDoc do

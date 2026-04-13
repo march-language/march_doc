@@ -5,9 +5,8 @@
 --
 -- Usage:
 --   forge march_doc.doc              generate docs for current project
---   forge march_doc.doc --stdlib     generate docs for stdlib
 --   forge march_doc.doc -o DIR       set output directory (default: doc)
---   forge march_doc.doc --private    include private functions
+--   forge march_doc.doc --stdlib     generate docs for stdlib
 
 mod MarchDocTask do
 
@@ -19,32 +18,29 @@ pfn parse_args() do
     Some(s) -> s
   end
   let parts = List.filter(String.split(raw, "\n"), fn s -> !String.is_empty(s))
-  fn go(ls, output, private, stdlib) do
+  fn go(ls, output, stdlib) do
     match ls do
-    Nil -> (output, private, stdlib)
+    Nil -> (output, stdlib)
     Cons(arg, rest) ->
-      if arg == "--private" do go(rest, output, true, stdlib)
+      if arg == "--stdlib" do go(rest, output, true)
       else
-        if arg == "--stdlib" do go(rest, output, private, true)
-        else
-          if arg == "-o" do
-            match rest do
-            Cons(val, rest2) -> go(rest2, val, private, stdlib)
-            Nil -> go(Nil, output, private, stdlib)
-            end
-          else
-            if arg == "--output" do
-              match rest do
-              Cons(val, rest2) -> go(rest2, val, private, stdlib)
-              Nil -> go(Nil, output, private, stdlib)
-              end
-            else go(rest, output, private, stdlib) end
+        if arg == "-o" do
+          match rest do
+          Cons(val, rest2) -> go(rest2, val, stdlib)
+          Nil -> go(Nil, output, stdlib)
           end
+        else
+          if arg == "--output" do
+            match rest do
+            Cons(val, rest2) -> go(rest2, val, stdlib)
+            Nil -> go(Nil, output, stdlib)
+            end
+          else go(rest, output, stdlib) end
         end
       end
     end
   end
-  go(parts, "doc", false, false)
+  go(parts, "doc", false)
 end
 
 -- ── Project discovery ────────────────────────────────────────────────────────
@@ -103,7 +99,7 @@ end
 -- ── Main ─────────────────────────────────────────────────────────────────────
 
 fn main() do
-  let (output_dir, include_private, stdlib_only) = parse_args()
+  let (output_dir, stdlib_only) = parse_args()
 
   let dirs = if stdlib_only do
     match find_stdlib_dir() do
@@ -128,7 +124,7 @@ fn main() do
     System.exit(1)
   else () end
 
-  MarchDoc.generate(dirs, output_dir, include_private)
+  MarchDoc.generate(dirs, output_dir, false)
 end
 
 end
