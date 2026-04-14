@@ -51,6 +51,19 @@ fn page_css() : String do
   ".sl:hover{background:var(--card);color:var(--acc);text-decoration:none}" ++
   ".sl.active{background:var(--card);color:var(--acc);font-weight:500}" ++
 
+  -- Hierarchical sidebar groups
+  ".sb-group{margin-bottom:2px}" ++
+  ".sb-group-hdr{display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:5px;font-size:13px;color:var(--dim);cursor:pointer;user-select:none;transition:all .1s}" ++
+  ".sb-group-hdr:hover{background:var(--card);color:var(--acc)}" ++
+  ".sb-group-hdr.active{color:var(--acc);font-weight:500}" ++
+  ".sb-chevron{font-size:9px;transition:transform .15s;width:12px;flex-shrink:0;text-align:center;color:var(--dim)}" ++
+  ".sb-group.open .sb-chevron{transform:rotate(90deg)}" ++
+  ".sb-sub{display:none;padding-left:16px}" ++
+  ".sb-group.open .sb-sub{display:block}" ++
+  ".sb-sub .sl{font-size:12px;padding:2px 8px;color:var(--dim);opacity:.8}" ++
+  ".sb-sub .sl:hover{opacity:1}" ++
+  ".sb-sub .sb-kind{font-size:8px;font-weight:700;letter-spacing:.05em;margin-right:4px;text-transform:uppercase;opacity:.6}" ++
+
   -- Main content
   "#main{flex:1;padding:36px 48px;max-width:880px;min-width:0;overflow-y:auto;height:calc(100vh - 48px)}" ++
 
@@ -170,9 +183,13 @@ fn page_js() : String do
   "if(e.target.classList.contains('anchor-link'))return;" ++
   "var b=this.nextElementSibling;if(b)b.classList.toggle('open');});});" ++
 
-  -- Active sidebar link
+  -- Active sidebar link + auto-expand current module group
   "var path=window.location.pathname;" ++
-  "document.querySelectorAll('.sl').forEach(function(a){if(path.endsWith(a.getAttribute('href')))a.classList.add('active');});" ++
+  "document.querySelectorAll('.sl').forEach(function(a){var h=a.getAttribute('href');if(h&&path.endsWith(h)){a.classList.add('active');var g=a.closest('.sb-group');if(g)g.classList.add('open');}});" ++
+
+  -- Sidebar group toggle (chevron click expands/collapses)
+  "document.querySelectorAll('.sb-group-hdr').forEach(function(hdr){hdr.addEventListener('click',function(e){" ++
+  "if(e.target.tagName==='A')return;e.preventDefault();this.parentElement.classList.toggle('open');});});" ++
 
   -- Copy buttons on pre blocks
   "document.querySelectorAll('.ib pre').forEach(function(pre){" ++
@@ -308,7 +325,6 @@ fn page(title : String, sidebar : String, is_index : Bool, content : String) : S
   "<div class=\"content-wrap\">" ++
   "<nav id=\"sb\">" ++
   "<div class=\"sb-section\">" ++
-  "<div class=\"sb-heading\">Modules</div>" ++
   "<a href=\"index.html\"" ++ idx_cls ++ ">Overview</a>" ++
   sidebar ++
   "</div>" ++
@@ -325,6 +341,49 @@ fn sidebar_links(module_names : List(String)) : String do
     Markdown.html_escape(name) ++ "</a>"
   )
   String.join(links, "\n")
+end
+
+-- Hierarchical sidebar: each module is an expandable group with sub-items.
+fn sidebar_nav(modules : List(Parser.ModuleInfo)) : String do
+  let groups = List.map(modules, fn info ->
+    match info do
+    Parser.ModuleInfo(mod_name, _, fns, types, ifaces, _) ->
+      let esc_name = Markdown.html_escape(mod_name)
+      let href = esc_name ++ ".html"
+      -- Sub-items
+      let type_items = List.map(types, fn e ->
+        match e do
+        Parser.TypeEntry(name, _, _, _) ->
+          "<a class=\"sl\" href=\"" ++ href ++ "#type-" ++ Markdown.html_escape(name) ++ "\">" ++
+          "<span class=\"sb-kind\" style=\"color:var(--ty)\">T</span>" ++ Markdown.html_escape(name) ++ "</a>"
+        end
+      )
+      let iface_items = List.map(ifaces, fn e ->
+        match e do
+        Parser.IfaceEntry(name, _, _, _, _) ->
+          "<a class=\"sl\" href=\"" ++ href ++ "#iface-" ++ Markdown.html_escape(name) ++ "\">" ++
+          "<span class=\"sb-kind\" style=\"color:var(--if)\">I</span>" ++ Markdown.html_escape(name) ++ "</a>"
+        end
+      )
+      let pub_fns = List.filter(fns, Parser.is_pub)
+      let fn_items = List.map(pub_fns, fn e ->
+        match e do
+        Parser.FnEntry(name, _, _, _, _) ->
+          "<a class=\"sl\" href=\"" ++ href ++ "#fn-" ++ Markdown.html_escape(name) ++ "\">" ++
+          "<span class=\"sb-kind\" style=\"color:var(--fn)\">F</span>" ++ Markdown.html_escape(name) ++ "</a>"
+        end
+      )
+      let all_sub = List.append(type_items, List.append(iface_items, fn_items))
+      let sub_html = if List.is_empty(all_sub) do ""
+        else "<div class=\"sb-sub\">" ++ String.join(all_sub, "\n") ++ "</div>" end
+      "<div class=\"sb-group\">" ++
+      "<div class=\"sb-group-hdr\" data-href=\"" ++ href ++ "\">" ++
+      "<span class=\"sb-chevron\">&#9656;</span>" ++
+      "<a class=\"sl\" href=\"" ++ href ++ "\">" ++ esc_name ++ "</a>" ++
+      "</div>" ++ sub_html ++ "</div>"
+    end
+  )
+  String.join(groups, "\n")
 end
 
 -- ── Item renderers ───────────────────────────────────────────────────────────

@@ -36,13 +36,11 @@ fn generate(src_dirs : List(String), output_dir : String, include_private : Bool
   let guides_dir = project_root ++ "/guides"
   let guide_files = Guides.discover(guides_dir)
 
-  let module_names = List.map(modules, Parser.info_name)
-
-  -- Build combined sidebar: guides (if any) + modules
+  -- Build combined sidebar: guides (if any) + hierarchical modules
   let guide_sidebar = if List.is_empty(guide_files) do ""
     else "<div class=\"sb-heading\">Guides</div>" ++ Guides.sidebar_links(guide_files) end
-  let module_sidebar = Html.sidebar_links(module_names)
-  let sidebar = guide_sidebar ++ module_sidebar
+  let module_sidebar = Html.sidebar_nav(modules)
+  let sidebar = guide_sidebar ++ "<div class=\"sb-heading\">Modules</div>" ++ module_sidebar
 
   let registry = TypeRegistry.build_registry(modules)
 
