@@ -70,7 +70,7 @@ fn main() do
       let name = read_package_name(root)
       let lib = root ++ "/lib"
       if Dir.exists(lib) do
-        MarchDoc.generate([lib], "docs/" ++ name, false)
+        MarchDoc.generate([lib], "docs/" ++ name, false, None)
       else
         IO.warn("march_doc: no lib/ directory found")
         System.exit(1)

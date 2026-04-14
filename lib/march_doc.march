@@ -6,7 +6,8 @@
 mod MarchDoc do
 
 -- Generate HTML documentation for all .march files in the given directories.
-fn generate(src_dirs : List(String), output_dir : String, include_private : Bool) : () do
+-- source_url is an optional URL pattern with {path} and {line} placeholders for source links.
+fn generate(src_dirs : List(String), output_dir : String, include_private : Bool, source_url : Option(String)) : () do
   let all_files = List.sort_by(
     List.flat_map(src_dirs, Discovery.walk_march_files),
     fn (a, b) -> a < b
@@ -23,27 +24,86 @@ fn generate(src_dirs : List(String), output_dir : String, include_private : Bool
       System.exit(1)
     Ok(_) -> ()
   end
+
+  -- Discover guides
+  let project_root = match List.head_opt(src_dirs) do
+    None -> "."
+    Some(d) ->
+      -- Go up one level from lib/ to project root
+      let parts = String.split(d, "/")
+      String.join(List.reverse(List.tail(List.reverse(parts))), "/")
+  end
+  let guides_dir = project_root ++ "/guides"
+  let guide_files = Guides.discover(guides_dir)
+
   let module_names = List.map(modules, Parser.info_name)
-  let sidebar = Html.sidebar_links(module_names)
+
+  -- Build combined sidebar: guides (if any) + modules
+  let guide_sidebar = if List.is_empty(guide_files) do ""
+    else "<div class=\"sb-heading\">Guides</div>" ++ Guides.sidebar_links(guide_files) end
+  let module_sidebar = Html.sidebar_links(module_names)
+  let sidebar = guide_sidebar ++ module_sidebar
+
   let registry = TypeRegistry.build_registry(modules)
+
+  -- Generate module pages
   List.each(modules, fn info ->
     let name = Parser.info_name(info)
-    let html = Html.render_module(info, sidebar, registry)
+    let html = Html.render_module(info, sidebar, registry, source_url)
     match File.write(output_dir ++ "/" ++ name ++ ".html", html) do
       Err(_) -> IO.warn("march_doc: failed to write " ++ name ++ ".html")
       Ok(_) -> ()
     end
   )
+
+  -- Generate guide pages
+  if !List.is_empty(guide_files) do
+    let guides_out = output_dir ++ "/guides"
+    match Dir.mkdir_p(guides_out) do Err(_) -> () | Ok(_) -> () end
+    List.each(guide_files, fn filename ->
+      let result = Guides.render_guide(guides_dir, filename, sidebar)
+      match result do
+      (out_name, html) ->
+        match File.write(guides_out ++ "/" ++ out_name, html) do
+          Err(_) -> IO.warn("march_doc: failed to write guide " ++ out_name)
+          Ok(_) -> ()
+        end
+      end
+    )
+  else () end
+
+  -- Generate index page
   let idx = Html.render_index(modules, sidebar)
   match File.write(output_dir ++ "/index.html", idx) do
     Err(_) -> IO.warn("march_doc: failed to write index.html")
     Ok(_) -> ()
   end
+
+  -- Generate search index
   let search_json = SearchIndex.build(modules)
   match File.write(output_dir ++ "/search-index.json", search_json) do
     Err(_) -> IO.warn("march_doc: failed to write search-index.json")
     Ok(_) -> ()
   end
+
+  -- Generate scroll notebooks
+  let scroll_dir = output_dir ++ "/scroll"
+  let scroll_notebooks = List.filter_map(modules, Scroll.render_module)
+  if !List.is_empty(scroll_notebooks) do
+    match Dir.mkdir_p(scroll_dir) do Err(_) -> () | Ok(_) -> () end
+    List.each(scroll_notebooks, fn nb ->
+      match nb do
+      (filename, content) ->
+        match File.write(scroll_dir ++ "/" ++ filename, content) do
+          Err(_) -> IO.warn("march_doc: failed to write " ++ filename)
+          Ok(_) -> ()
+        end
+      end
+    )
+    IO.puts("march_doc: generated " ++ String.from_int(List.length(scroll_notebooks)) ++
+      " scroll notebooks in " ++ scroll_dir ++ "/")
+  else () end
+
   IO.puts("march_doc: generated " ++ String.from_int(List.length(modules)) ++
     " module pages in " ++ output_dir ++ "/")
   IO.puts("  open " ++ output_dir ++ "/index.html")

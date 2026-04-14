@@ -1,0 +1,61 @@
+-- Guides — discover and render guides/*.md into HTML pages.
+
+mod Guides do
+
+-- Discover .md files in a guides/ directory.
+fn discover(guides_dir : String) : List(String) do
+  if Dir.exists(guides_dir) do
+    let entries = Dir.list(guides_dir)
+    List.sort_by(
+      List.filter(entries, fn name -> String.ends_with(name, ".md")),
+      fn (a, b) -> a < b
+    )
+  else Nil end
+end
+
+-- Derive a display name from a filename: "getting-started.md" → "Getting Started"
+pfn display_name(filename) do
+  let base = if String.ends_with(filename, ".md") do
+    Markdown.drop_suffix(filename, ".md")
+  else filename end
+  -- Replace hyphens and underscores with spaces, capitalize first letter
+  let spaced = String.replace_all(String.replace_all(base, "-", " "), "_", " ")
+  if String.byte_size(spaced) > 0 do
+    let first = String.slice(spaced, 0, 1)
+    let rest = String.slice(spaced, 1, String.byte_size(spaced) - 1)
+    -- Simple uppercase for ASCII a-z
+    let upper = if first >= "a" && first <= "z" do
+      -- Convert to uppercase via char code offset
+      String.from_codepoint(String.codepoint_at(first, 0) - 32)
+    else first end
+    upper ++ rest
+  else spaced end
+end
+
+-- Build sidebar links for guide pages.
+fn sidebar_links(guide_files : List(String)) : String do
+  let links = List.map(guide_files, fn filename ->
+    let name = display_name(filename)
+    let href = "guides/" ++ Markdown.html_escape(Markdown.drop_suffix(filename, ".md")) ++ ".html"
+    "<a class=\"sl\" href=\"" ++ href ++ "\">" ++ Markdown.html_escape(name) ++ "</a>"
+  )
+  String.join(links, "\n")
+end
+
+-- Render a single guide .md file into an HTML page.
+fn render_guide(guides_dir : String, filename : String, sidebar : String) : (String, String) do
+  let path = guides_dir ++ "/" ++ filename
+  let name = display_name(filename)
+  let out_name = Markdown.drop_suffix(filename, ".md") ++ ".html"
+  let content = match File.read(path) do
+    Err(_) -> "<p>Could not read guide.</p>"
+    Ok(md) ->
+      "<nav class=\"breadcrumb\"><a href=\"../index.html\">March Docs</a><span class=\"sep\">&rsaquo;</span><a href=\"../index.html\">Guides</a><span class=\"sep\">&rsaquo;</span><span>" ++ Markdown.html_escape(name) ++ "</span></nav>" ++
+      "<h1>" ++ Markdown.html_escape(name) ++ "</h1>" ++
+      "<div class=\"guide-body\">" ++ Markdown.md_to_html(md) ++ "</div>"
+  end
+  let html = Html.page(name, sidebar, false, content)
+  (out_name, html)
+end
+
+end

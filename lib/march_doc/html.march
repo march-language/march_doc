@@ -82,7 +82,9 @@ fn page_css() : String do
   ".ib{padding:18px 20px;border-top:1px solid var(--bdr);display:none;font-size:14px;color:var(--text);line-height:1.7}" ++
   ".ib.open{display:block}" ++
 
-  -- Anchor links
+  -- Source + anchor links
+  ".src-link{font-size:10px;color:var(--dim);background:var(--bg);border:1px solid var(--bdr);border-radius:4px;padding:1px 6px;margin-left:auto;opacity:0;transition:all .15s;text-decoration:none;flex-shrink:0}" ++
+  ".ih:hover .src-link{opacity:1}.src-link:hover{color:var(--acc);border-color:var(--acc);text-decoration:none}" ++
   ".anchor-link{color:var(--bdr);font-size:14px;margin-left:6px;opacity:0;transition:opacity .15s;text-decoration:none}" ++
   ".ih:hover .anchor-link{opacity:1}.anchor-link:hover{color:var(--acc);text-decoration:none}" ++
 
@@ -127,6 +129,11 @@ fn page_css() : String do
 
   -- Lists
   "ul,ol{margin:8px 0;padding-left:24px}li{margin:4px 0;line-height:1.6}" ++
+
+  -- Guide body
+  ".guide-body{line-height:1.8;font-size:15px}" ++
+  ".guide-body h3{font-size:1.2rem;margin:28px 0 12px;color:var(--bright)}" ++
+  ".guide-body h4{font-size:1rem;margin:24px 0 10px;color:var(--bright)}" ++
 
   -- Light mode code blocks stay dark
   "[data-theme='light'] pre{background:#0F2A36;border-color:#133847}" ++
@@ -329,18 +336,33 @@ pfn render_comment_html(comment_opt) do
   end
 end
 
-pfn render_fn(entry, registry, mod_name) do
+-- Build a source link from a URL pattern, file path, and line number.
+-- Pattern uses {path} and {line} placeholders.
+pfn make_src_link(src_pattern, file_path, line_num) do
+  match src_pattern do
+  None -> ""
+  Some(pattern) ->
+    if line_num <= 0 do ""
+    else
+      let url = String.replace_all(String.replace_all(pattern, "{path}", file_path), "{line}", String.from_int(line_num))
+      "<a class=\"src-link\" href=\"" ++ Markdown.html_escape(url) ++ "\" target=\"_blank\" title=\"View source\">src</a>"
+    end
+  end
+end
+
+pfn render_fn(entry, registry, mod_name, src_pattern, file_path) do
   match entry do
-  Parser.FnEntry(name, dsig, doc_opt, is_private, _line) ->
+  Parser.FnEntry(name, dsig, doc_opt, is_private, line_num) ->
     let badge_cls = if is_private do "bpfn" else "bfn" end
     let badge_lbl = if is_private do "pfn" else "fn" end
     let anchor_id = "fn-" ++ Markdown.html_escape(name)
     let badge = "<span class=\"badge " ++ badge_cls ++ "\">" ++ badge_lbl ++ "</span>"
+    let src = make_src_link(src_pattern, file_path, line_num)
     let anchor = "<a class=\"anchor-link\" href=\"#" ++ anchor_id ++ "\" title=\"Link\">#</a>"
     let sig_html = TypeRegistry.linkify_signature(dsig, registry, mod_name)
     let hdr = "<div class=\"ih\">" ++ badge ++
       "<span class=\"name\">" ++ Markdown.html_escape(name) ++ "</span>" ++
-      "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ anchor ++ "</div>"
+      "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ src ++ anchor ++ "</div>"
     let doc_html = match doc_opt do
       None -> ""
       Some(d) -> Markdown.md_to_html(d)
@@ -350,20 +372,21 @@ pfn render_fn(entry, registry, mod_name) do
   end
 end
 
-pfn render_type(entry, registry, mod_name) do
+pfn render_type(entry, registry, mod_name, src_pattern, file_path) do
   match entry do
-  Parser.TypeEntry(name, dsig, doc_opt, _line) ->
+  Parser.TypeEntry(name, dsig, doc_opt, line_num) ->
     let is_prv = String.starts_with(dsig, "ptype ")
     let badge_cls = if is_prv do "bpt" else "bty" end
     let badge_lbl = if is_prv do "ptype" else "type" end
     let anchor_id = "type-" ++ Markdown.html_escape(name)
     let badge = "<span class=\"badge " ++ badge_cls ++ "\">" ++ badge_lbl ++ "</span>"
+    let src = make_src_link(src_pattern, file_path, line_num)
     let anchor = "<a class=\"anchor-link\" href=\"#" ++ anchor_id ++ "\" title=\"Link\">#</a>"
     let disp = if is_prv do Markdown.drop_prefix(dsig, "ptype ") else dsig end
     let sig_html = TypeRegistry.linkify_signature(disp, registry, mod_name)
     let hdr = "<div class=\"ih\">" ++ badge ++
       "<span class=\"name\">" ++ Markdown.html_escape(name) ++ "</span>" ++
-      "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ anchor ++ "</div>"
+      "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ src ++ anchor ++ "</div>"
     let doc_html = match doc_opt do
       None -> ""
       Some(d) -> Markdown.md_to_html(d)
@@ -373,16 +396,17 @@ pfn render_type(entry, registry, mod_name) do
   end
 end
 
-pfn render_iface(entry, registry, mod_name) do
+pfn render_iface(entry, registry, mod_name, src_pattern, file_path) do
   match entry do
-  Parser.IfaceEntry(name, dsig, doc_opt, _methods, _line) ->
+  Parser.IfaceEntry(name, dsig, doc_opt, _methods, line_num) ->
     let anchor_id = "iface-" ++ Markdown.html_escape(name)
     let badge = "<span class=\"badge bif\">interface</span>"
+    let src = make_src_link(src_pattern, file_path, line_num)
     let anchor = "<a class=\"anchor-link\" href=\"#" ++ anchor_id ++ "\" title=\"Link\">#</a>"
     let sig_html = TypeRegistry.linkify_signature(dsig, registry, mod_name)
     let hdr = "<div class=\"ih\">" ++ badge ++
       "<span class=\"name\">" ++ Markdown.html_escape(name) ++ "</span>" ++
-      "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ anchor ++ "</div>"
+      "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ src ++ anchor ++ "</div>"
     let doc_html = match doc_opt do
       None -> ""
       Some(d) -> Markdown.md_to_html(d)
@@ -394,26 +418,26 @@ end
 
 -- ── Module page ──────────────────────────────────────────────────────────────
 
-fn render_module(info : Parser.ModuleInfo, sidebar : String, registry : List(TypeRegistry.TypeRef)) : String do
+fn render_module(info : Parser.ModuleInfo, sidebar : String, registry : List(TypeRegistry.TypeRef), src_pattern : Option(String)) : String do
   match info do
-  Parser.ModuleInfo(mod_name, comment_opt, fns, types, ifaces, _path) ->
+  Parser.ModuleInfo(mod_name, comment_opt, fns, types, ifaces, file_path) ->
     let breadcrumb = "<nav class=\"breadcrumb\"><a href=\"index.html\">March Docs</a><span class=\"sep\">&rsaquo;</span><span>" ++ Markdown.html_escape(mod_name) ++ "</span></nav>"
     let title_html = breadcrumb ++ "<h1>" ++ Markdown.html_escape(mod_name) ++ "</h1>"
     let comment_html = render_comment_html(comment_opt)
     let types_html =
       if List.is_empty(types) do ""
-      else "<h2>Types</h2>" ++ String.join(List.map(types, fn e -> render_type(e, registry, mod_name)), "\n") end
+      else "<h2>Types</h2>" ++ String.join(List.map(types, fn e -> render_type(e, registry, mod_name, src_pattern, file_path)), "\n") end
     let ifaces_html =
       if List.is_empty(ifaces) do ""
-      else "<h2>Interfaces</h2>" ++ String.join(List.map(ifaces, fn e -> render_iface(e, registry, mod_name)), "\n") end
+      else "<h2>Interfaces</h2>" ++ String.join(List.map(ifaces, fn e -> render_iface(e, registry, mod_name, src_pattern, file_path)), "\n") end
     let pub_fns = List.filter(fns, Parser.is_pub)
     let prv_fns = List.filter(fns, Parser.is_prv)
     let pub_html =
       if List.is_empty(pub_fns) do ""
-      else "<h2>Functions</h2>" ++ String.join(List.map(pub_fns, fn e -> render_fn(e, registry, mod_name)), "\n") end
+      else "<h2>Functions</h2>" ++ String.join(List.map(pub_fns, fn e -> render_fn(e, registry, mod_name, src_pattern, file_path)), "\n") end
     let prv_html =
       if List.is_empty(prv_fns) do ""
-      else "<h2>Private</h2>" ++ String.join(List.map(prv_fns, fn e -> render_fn(e, registry, mod_name)), "\n") end
+      else "<h2>Private</h2>" ++ String.join(List.map(prv_fns, fn e -> render_fn(e, registry, mod_name, src_pattern, file_path)), "\n") end
     let content = title_html ++ comment_html ++ types_html ++ ifaces_html ++ pub_html ++ prv_html
     page(mod_name, sidebar, false, content)
   end

@@ -13,7 +13,7 @@ pfn setup_and_generate(name, files, include_private) do
         match File.write(src_dir ++ "/" ++ fname, content) do Ok(_) -> () | Err(_) -> () end
     end
   )
-  MarchDoc.generate(Cons(src_dir, Nil), out_dir, include_private)
+  MarchDoc.generate(Cons(src_dir, Nil), out_dir, include_private, None)
   out_dir
 end
 
@@ -157,7 +157,7 @@ describe "Integration" do
       match Dir.mkdir_p(src2) do Err(_) -> () | Ok(_) -> () end
       match File.write(src1 ++ "/a.march", "mod ModA do\nfn a() do 1 end\nend") do Ok(_) -> () | Err(_) -> () end
       match File.write(src2 ++ "/b.march", "mod ModB do\nfn b() do 2 end\nend") do Ok(_) -> () | Err(_) -> () end
-      MarchDoc.generate(Cons(src1, Cons(src2, Nil)), out, false)
+      MarchDoc.generate(Cons(src1, Cons(src2, Nil)), out, false, None)
       let idx = read_file(out ++ "/index.html")
       assert (String.contains(idx, "ModA"))
       assert (String.contains(idx, "ModB"))

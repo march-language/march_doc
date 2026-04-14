@@ -1,0 +1,117 @@
+-- Scroll — generate .scroll.md notebook files from parsed modules.
+-- Each module becomes a Scroll notebook with runnable code examples.
+
+mod Scroll do
+
+-- Extract code examples from a doc string (fenced ```march blocks).
+pfn extract_code_blocks(doc_opt) do
+  match doc_opt do
+  None -> Nil
+  Some(doc_text) ->
+    let lines = String.split(doc_text, "\n")
+    fn go(ls, in_code, buf, blocks) do
+      match ls do
+      Nil ->
+        if in_code do
+          -- Unclosed fence — include what we have
+          List.reverse(Cons(String.join(List.reverse(buf), "\n"), blocks))
+        else List.reverse(blocks) end
+      Cons(line, rest) ->
+        let t = String.trim(line)
+        if in_code do
+          if t == "```" do
+            go(rest, false, Nil, Cons(String.join(List.reverse(buf), "\n"), blocks))
+          else go(rest, true, Cons(line, buf), blocks) end
+        else
+          if String.starts_with(t, "```march") do go(rest, true, Nil, blocks)
+          else go(rest, false, buf, blocks) end
+        end
+      end
+    end
+    go(lines, false, Nil, Nil)
+  end
+end
+
+-- Render a single FnEntry as a scroll section.
+pfn render_fn_section(entry) do
+  match entry do
+  Parser.FnEntry(name, dsig, doc_opt, _, _) ->
+    let blocks = extract_code_blocks(doc_opt)
+    if List.is_empty(blocks) do ""
+    else
+      let doc_text = match doc_opt do
+        None -> ""
+        Some(d) ->
+          -- Strip code fences from the doc for the prose
+          let lines = String.split(d, "\n")
+          fn strip(ls, in_code, out) do
+            match ls do
+            Nil -> String.trim(String.join(List.reverse(out), "\n"))
+            Cons(line, rest) ->
+              let t = String.trim(line)
+              if in_code do
+                if t == "```" do strip(rest, false, out)
+                else strip(rest, true, out) end
+              else
+                if String.starts_with(t, "```march") do strip(rest, true, out)
+                else strip(rest, false, Cons(line, out)) end
+              end
+            end
+          end
+          strip(lines, false, Nil)
+      end
+      let header = "## fn " ++ dsig ++ "\n\n"
+      let prose = if String.is_empty(doc_text) do "" else doc_text ++ "\n\n" end
+      let code = String.join(List.map(blocks, fn block ->
+        "```march\n" ++ block ++ "\n```"
+      ), "\n\n")
+      header ++ prose ++ code ++ "\n\n"
+    end
+  end
+end
+
+-- Render a single TypeEntry as a scroll section.
+pfn render_type_section(entry) do
+  match entry do
+  Parser.TypeEntry(name, dsig, doc_opt, _) ->
+    let blocks = extract_code_blocks(doc_opt)
+    if List.is_empty(blocks) do ""
+    else
+      let header = "## type " ++ dsig ++ "\n\n"
+      let code = String.join(List.map(blocks, fn block ->
+        "```march\n" ++ block ++ "\n```"
+      ), "\n\n")
+      header ++ code ++ "\n\n"
+    end
+  end
+end
+
+-- Generate a .scroll.md file for a module.
+fn render_module(info : Parser.ModuleInfo) : Option((String, String)) do
+  match info do
+  Parser.ModuleInfo(mod_name, comment_opt, fns, types, _, _) ->
+    -- Collect type sections (with examples) first, then fn sections
+    let type_sections = List.filter(
+      List.map(types, render_type_section),
+      fn s -> !String.is_empty(s)
+    )
+    let fn_sections = List.filter(
+      List.map(fns, render_fn_section),
+      fn s -> !String.is_empty(s)
+    )
+    if List.is_empty(type_sections) && List.is_empty(fn_sections) do None
+    else
+      let header = "# " ++ mod_name ++ "\n\n"
+      let mod_doc = match comment_opt do
+        None -> ""
+        Some(c) -> c ++ "\n\n"
+      end
+      let body = header ++ mod_doc ++
+        String.join(type_sections, "") ++
+        String.join(fn_sections, "")
+      Some((mod_name ++ ".scroll.md", body))
+    end
+  end
+end
+
+end
