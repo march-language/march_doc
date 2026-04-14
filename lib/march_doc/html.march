@@ -5,10 +5,10 @@ mod Html do
 -- ── CSS ──────────────────────────────────────────────────────────────────────
 
 fn page_css() : String do
-  -- Dark theme (default) — March brand colors
-  ":root{--bg:#0B1F2A;--sb:#081920;--card:#0F2A36;--bdr:#133847;--acc:#6FE3D6;" ++
-  "--acc2:#3ABFF8;--text:#D6EEF5;--dim:#a8ccd8;--bright:#CFF7F1;--code:#081920;" ++
-  "--fn:#36D399;--ty:#FBBF24;--if:#3ABFF8;--prv:#3d6070}" ++
+  -- Dark theme (default) — near-black with March brand accents
+  ":root{--bg:#09090b;--sb:#0f0f12;--card:#141418;--bdr:#23252b;--acc:#6FE3D6;" ++
+  "--acc2:#3ABFF8;--text:#d4d4d8;--dim:#71717a;--bright:#fafafa;--code:#0c0c0f;" ++
+  "--fn:#36D399;--ty:#FBBF24;--if:#3ABFF8;--prv:#3f3f46}" ++
 
   -- Light theme overrides
   "[data-theme='light']{--bg:#ffffff;--sb:#f4f9fb;--card:#ffffff;--bdr:#d0e3eb;--acc:#0d9e8f;" ++
