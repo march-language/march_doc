@@ -1,0 +1,101 @@
+-- TypeRegistry — build a cross-link registry from parsed modules.
+
+mod TypeRegistry do
+
+-- TypeRef(type_name, module_name, anchor)
+type TypeRef = TypeRef(String, String, String)
+
+-- Build a registry of all type and interface names across modules.
+fn build_registry(modules : List(Parser.ModuleInfo)) : List(TypeRef) do
+  List.flat_map(modules, fn info ->
+    match info do
+    Parser.ModuleInfo(mod_name, _, _, types, ifaces, _) ->
+      let type_refs = List.map(types, fn entry ->
+        match entry do
+        Parser.TypeEntry(name, _, _, _) ->
+          TypeRef(name, mod_name, "type-" ++ name)
+        end
+      )
+      let iface_refs = List.map(ifaces, fn entry ->
+        match entry do
+        Parser.IfaceEntry(name, _, _, _, _) ->
+          TypeRef(name, mod_name, "iface-" ++ name)
+        end
+      )
+      List.append(type_refs, iface_refs)
+    end
+  )
+end
+
+-- Check if a token looks like a type name (starts with uppercase, length > 1).
+pfn is_type_token(tok) do
+  if String.byte_size(tok) <= 1 do false
+  else
+    let ch = String.slice(tok, 0, 1)
+    ch >= "A" && ch <= "Z"
+  end
+end
+
+-- Find a TypeRef by name in the registry.
+pfn find_ref(name, registry) do
+  match registry do
+  Nil -> None
+  Cons(ref, rest) ->
+    match ref do
+    TypeRef(n, _, _) ->
+      if n == name do Some(ref)
+      else find_ref(name, rest) end
+    end
+  end
+end
+
+-- Check if a character is a delimiter for tokenization.
+pfn is_delim(ch) do
+  if ch == "(" do true
+  else if ch == ")" do true
+  else if ch == "," do true
+  else if ch == " " do true
+  else if ch == ":" do true
+  else false end end end end end
+end
+
+-- Tokenize a signature string into words and delimiters.
+-- Returns a list of tokens (words and individual punctuation chars).
+pfn tokenize_sig(s) do
+  fn go(i, n, start, acc) do
+    if i >= n do
+      if i > start do List.reverse(Cons(String.slice(s, start, i - start), acc))
+      else List.reverse(acc) end
+    else
+      let ch = String.slice(s, i, 1)
+      if is_delim(ch) do
+        let acc2 = if i > start do Cons(String.slice(s, start, i - start), acc) else acc end
+        go(i + 1, n, i + 1, Cons(ch, acc2))
+      else go(i + 1, n, start, acc) end
+    end
+  end
+  go(0, String.byte_size(s), 0, Nil)
+end
+
+-- Linkify type names in a signature string.
+-- Known types become <a> links; everything else is HTML-escaped.
+fn linkify_signature(signature : String, registry : List(TypeRef), current_module : String) : String do
+  let tokens = tokenize_sig(signature)
+  let parts = List.map(tokens, fn tok ->
+    if is_type_token(tok) do
+      match find_ref(tok, registry) do
+      None -> Markdown.html_escape(tok)
+      Some(ref) ->
+        match ref do
+        TypeRef(_, mod_name, anchor) ->
+          let href = if mod_name == current_module do "#" ++ anchor
+            else mod_name ++ ".html#" ++ anchor end
+          "<a href=\"" ++ Markdown.html_escape(href) ++ "\">" ++ Markdown.html_escape(tok) ++ "</a>"
+        end
+      end
+    else Markdown.html_escape(tok) end
+  )
+  String.join(parts, "")
+end
+
+end

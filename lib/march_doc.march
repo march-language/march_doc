@@ -25,9 +25,10 @@ fn generate(src_dirs : List(String), output_dir : String, include_private : Bool
   end
   let module_names = List.map(modules, Parser.info_name)
   let sidebar = Html.sidebar_links(module_names)
+  let registry = TypeRegistry.build_registry(modules)
   List.each(modules, fn info ->
     let name = Parser.info_name(info)
-    let html = Html.render_module(info, sidebar)
+    let html = Html.render_module(info, sidebar, registry)
     match File.write(output_dir ++ "/" ++ name ++ ".html", html) do
       Err(_) -> IO.warn("march_doc: failed to write " ++ name ++ ".html")
       Ok(_) -> ()

@@ -120,6 +120,14 @@ fn page_css() : String do
   ".sr-doc{color:var(--dim);font-size:11px;padding:0 12px 6px 48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" ++
   ".sr-sep{border-top:1px solid var(--bdr);margin:2px 8px}" ++
 
+  -- Admonitions
+  ".admonition{border-left:3px solid var(--acc);background:var(--card);border-radius:0 6px 6px 0;padding:12px 16px;margin:12px 0;font-size:14px;color:var(--text)}" ++
+  ".admonition.warning{border-left-color:var(--ty)}" ++
+  ".admonition.note{border-left-color:var(--acc2)}" ++
+
+  -- Lists
+  "ul,ol{margin:8px 0;padding-left:24px}li{margin:4px 0;line-height:1.6}" ++
+
   -- Light mode code blocks stay dark
   "[data-theme='light'] pre{background:#0F2A36;border-color:#133847}" ++
   "[data-theme='light'] pre code{color:#D6EEF5}" ++
@@ -321,7 +329,7 @@ pfn render_comment_html(comment_opt) do
   end
 end
 
-pfn render_fn(entry) do
+pfn render_fn(entry, registry, mod_name) do
   match entry do
   Parser.FnEntry(name, dsig, doc_opt, is_private, _line) ->
     let badge_cls = if is_private do "bpfn" else "bfn" end
@@ -329,9 +337,10 @@ pfn render_fn(entry) do
     let anchor_id = "fn-" ++ Markdown.html_escape(name)
     let badge = "<span class=\"badge " ++ badge_cls ++ "\">" ++ badge_lbl ++ "</span>"
     let anchor = "<a class=\"anchor-link\" href=\"#" ++ anchor_id ++ "\" title=\"Link\">#</a>"
+    let sig_html = TypeRegistry.linkify_signature(dsig, registry, mod_name)
     let hdr = "<div class=\"ih\">" ++ badge ++
       "<span class=\"name\">" ++ Markdown.html_escape(name) ++ "</span>" ++
-      "<span class=\"sig\">" ++ Markdown.html_escape(dsig) ++ "</span>" ++ anchor ++ "</div>"
+      "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ anchor ++ "</div>"
     let doc_html = match doc_opt do
       None -> ""
       Some(d) -> Markdown.md_to_html(d)
@@ -341,7 +350,7 @@ pfn render_fn(entry) do
   end
 end
 
-pfn render_type(entry) do
+pfn render_type(entry, registry, mod_name) do
   match entry do
   Parser.TypeEntry(name, dsig, doc_opt, _line) ->
     let is_prv = String.starts_with(dsig, "ptype ")
@@ -351,9 +360,10 @@ pfn render_type(entry) do
     let badge = "<span class=\"badge " ++ badge_cls ++ "\">" ++ badge_lbl ++ "</span>"
     let anchor = "<a class=\"anchor-link\" href=\"#" ++ anchor_id ++ "\" title=\"Link\">#</a>"
     let disp = if is_prv do Markdown.drop_prefix(dsig, "ptype ") else dsig end
+    let sig_html = TypeRegistry.linkify_signature(disp, registry, mod_name)
     let hdr = "<div class=\"ih\">" ++ badge ++
       "<span class=\"name\">" ++ Markdown.html_escape(name) ++ "</span>" ++
-      "<span class=\"sig\">" ++ Markdown.html_escape(disp) ++ "</span>" ++ anchor ++ "</div>"
+      "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ anchor ++ "</div>"
     let doc_html = match doc_opt do
       None -> ""
       Some(d) -> Markdown.md_to_html(d)
@@ -363,15 +373,16 @@ pfn render_type(entry) do
   end
 end
 
-pfn render_iface(entry) do
+pfn render_iface(entry, registry, mod_name) do
   match entry do
   Parser.IfaceEntry(name, dsig, doc_opt, _methods, _line) ->
     let anchor_id = "iface-" ++ Markdown.html_escape(name)
     let badge = "<span class=\"badge bif\">interface</span>"
     let anchor = "<a class=\"anchor-link\" href=\"#" ++ anchor_id ++ "\" title=\"Link\">#</a>"
+    let sig_html = TypeRegistry.linkify_signature(dsig, registry, mod_name)
     let hdr = "<div class=\"ih\">" ++ badge ++
       "<span class=\"name\">" ++ Markdown.html_escape(name) ++ "</span>" ++
-      "<span class=\"sig\">" ++ Markdown.html_escape(dsig) ++ "</span>" ++ anchor ++ "</div>"
+      "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ anchor ++ "</div>"
     let doc_html = match doc_opt do
       None -> ""
       Some(d) -> Markdown.md_to_html(d)
@@ -383,7 +394,7 @@ end
 
 -- ── Module page ──────────────────────────────────────────────────────────────
 
-fn render_module(info : Parser.ModuleInfo, sidebar : String) : String do
+fn render_module(info : Parser.ModuleInfo, sidebar : String, registry : List(TypeRegistry.TypeRef)) : String do
   match info do
   Parser.ModuleInfo(mod_name, comment_opt, fns, types, ifaces, _path) ->
     let breadcrumb = "<nav class=\"breadcrumb\"><a href=\"index.html\">March Docs</a><span class=\"sep\">&rsaquo;</span><span>" ++ Markdown.html_escape(mod_name) ++ "</span></nav>"
@@ -391,18 +402,18 @@ fn render_module(info : Parser.ModuleInfo, sidebar : String) : String do
     let comment_html = render_comment_html(comment_opt)
     let types_html =
       if List.is_empty(types) do ""
-      else "<h2>Types</h2>" ++ String.join(List.map(types, render_type), "\n") end
+      else "<h2>Types</h2>" ++ String.join(List.map(types, fn e -> render_type(e, registry, mod_name)), "\n") end
     let ifaces_html =
       if List.is_empty(ifaces) do ""
-      else "<h2>Interfaces</h2>" ++ String.join(List.map(ifaces, render_iface), "\n") end
+      else "<h2>Interfaces</h2>" ++ String.join(List.map(ifaces, fn e -> render_iface(e, registry, mod_name)), "\n") end
     let pub_fns = List.filter(fns, Parser.is_pub)
     let prv_fns = List.filter(fns, Parser.is_prv)
     let pub_html =
       if List.is_empty(pub_fns) do ""
-      else "<h2>Functions</h2>" ++ String.join(List.map(pub_fns, render_fn), "\n") end
+      else "<h2>Functions</h2>" ++ String.join(List.map(pub_fns, fn e -> render_fn(e, registry, mod_name)), "\n") end
     let prv_html =
       if List.is_empty(prv_fns) do ""
-      else "<h2>Private</h2>" ++ String.join(List.map(prv_fns, render_fn), "\n") end
+      else "<h2>Private</h2>" ++ String.join(List.map(prv_fns, fn e -> render_fn(e, registry, mod_name)), "\n") end
     let content = title_html ++ comment_html ++ types_html ++ ifaces_html ++ pub_html ++ prv_html
     page(mod_name, sidebar, false, content)
   end

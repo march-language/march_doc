@@ -22,19 +22,98 @@ end
 
 -- ── Inline rendering ─────────────────────────────────────────────────────────
 
-fn render_inline(text : String) : String do
+-- Render inline `code` spans.
+pfn render_code_spans(text) do
   fn go(s, out) do
     match String.split_first(s, "`") do
-    None -> List.reverse(Cons(html_escape(s), out))
+    None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
     Some((before, after)) ->
       match String.split_first(after, "`") do
-      None -> List.reverse(Cons(html_escape(s), out))
+      None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
       Some((code, rest)) ->
         go(rest, Cons("</code>", Cons(html_escape(code), Cons("<code>", Cons(html_escape(before), out)))))
       end
     end
   end
-  String.join(go(text, Nil), "")
+  go(text, Nil)
+end
+
+-- Render [text](url) links in a string (no code spans — call after splitting code).
+pfn render_links(text) do
+  fn go(s, out) do
+    match String.split_first(s, "[") do
+    None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
+    Some((before, after_bracket)) ->
+      match String.split_first(after_bracket, "](") do
+      Some((link_text, after_paren)) ->
+        match String.split_first(after_paren, ")") do
+        Some((url, rest)) ->
+          let link_html = "<a href=\"" ++ html_escape(url) ++ "\">" ++ html_escape(link_text) ++ "</a>"
+          go(rest, Cons(link_html, Cons(html_escape(before), out)))
+        None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
+        end
+      None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
+      end
+    end
+  end
+  go(text, Nil)
+end
+
+-- Render **bold** in a string (operates on already-escaped/processed text).
+pfn render_bold(text) do
+  fn go(s, out) do
+    match String.split_first(s, "**") do
+    None -> String.join(List.reverse(Cons(s, out)), "")
+    Some((before, after)) ->
+      match String.split_first(after, "**") do
+      Some((bold_text, rest)) ->
+        go(rest, Cons("</strong>", Cons(bold_text, Cons("<strong>", Cons(before, out)))))
+      None -> String.join(List.reverse(Cons(s, out)), "")
+      end
+    end
+  end
+  go(text, Nil)
+end
+
+-- Render *italic* in a string (operates on already-processed text).
+pfn render_italic(text) do
+  fn go(s, out) do
+    match String.split_first(s, "*") do
+    None -> String.join(List.reverse(Cons(s, out)), "")
+    Some((before, after)) ->
+      match String.split_first(after, "*") do
+      Some((em_text, rest)) ->
+        go(rest, Cons("</em>", Cons(em_text, Cons("<em>", Cons(before, out)))))
+      None -> String.join(List.reverse(Cons(s, out)), "")
+      end
+    end
+  end
+  go(text, Nil)
+end
+
+-- Render inline formatting: `code`, [links](url), **bold**, *italic*.
+-- Processing order: code spans first (to protect their contents), then links, bold, italic.
+fn render_inline(text : String) : String do
+  -- Step 1: Process code spans — split around backticks, escape non-code parts
+  fn process_segments(s, out) do
+    match String.split_first(s, "`") do
+    None ->
+      -- No more backticks: apply link/bold/italic to this segment
+      let processed = render_italic(render_bold(render_links(html_escape(s))))
+      List.reverse(Cons(processed, out))
+    Some((before, after)) ->
+      match String.split_first(after, "`") do
+      None ->
+        let processed = render_italic(render_bold(render_links(html_escape(s))))
+        List.reverse(Cons(processed, out))
+      Some((code, rest)) ->
+        let before_processed = render_italic(render_bold(render_links(html_escape(before))))
+        let code_html = "<code>" ++ html_escape(code) ++ "</code>"
+        process_segments(rest, Cons(code_html, Cons(before_processed, out)))
+      end
+    end
+  end
+  String.join(process_segments(text, Nil), "")
 end
 
 -- ── Block-level markdown ─────────────────────────────────────────────────────
@@ -73,20 +152,121 @@ pfn md_heading(t) do
   end
 end
 
+-- Check if a line is a blockquote admonition: > **Note:** or > **Warning:**
+pfn is_admonition(t) do
+  String.starts_with(t, "> ")
+end
+
+-- Detect unordered list item: starts with "- " or "* "
+pfn is_ul_item(t) do
+  String.starts_with(t, "- ") || String.starts_with(t, "* ")
+end
+
+-- Detect ordered list item: starts with "N. "
+pfn is_ol_item(t) do
+  if String.byte_size(t) >= 3 do
+    let ch = String.slice(t, 0, 1)
+    ch >= "0" && ch <= "9" && String.contains(t, ". ")
+  else false end
+end
+
+-- Extract list item text after the marker
+pfn list_item_text(t) do
+  if String.starts_with(t, "- ") do drop_prefix(t, "- ")
+  else
+    if String.starts_with(t, "* ") do drop_prefix(t, "* ")
+    else
+      -- Ordered list: skip "N. " prefix
+      match String.split_first(t, ". ") do
+      Some((_, rest)) -> rest
+      None -> t
+      end
+    end
+  end
+end
+
+-- Collect consecutive list items and blockquote lines
+pfn collect_ul(lines, items) do
+  match lines do
+  Nil -> (List.reverse(items), Nil)
+  Cons(line, rest) ->
+    let t = String.trim(line)
+    if is_ul_item(t) do collect_ul(rest, Cons(list_item_text(t), items))
+    else (List.reverse(items), lines) end
+  end
+end
+
+pfn collect_ol(lines, items) do
+  match lines do
+  Nil -> (List.reverse(items), Nil)
+  Cons(line, rest) ->
+    let t = String.trim(line)
+    if is_ol_item(t) do collect_ol(rest, Cons(list_item_text(t), items))
+    else (List.reverse(items), lines) end
+  end
+end
+
+pfn collect_blockquote(lines, items) do
+  match lines do
+  Nil -> (List.reverse(items), Nil)
+  Cons(line, rest) ->
+    let t = String.trim(line)
+    if is_admonition(t) do collect_blockquote(rest, Cons(drop_prefix(t, "> "), items))
+    else (List.reverse(items), lines) end
+  end
+end
+
+pfn render_list_items(items) do
+  String.join(List.map(items, fn item -> "<li>" ++ render_inline(item) ++ "</li>"), "")
+end
+
+pfn render_admonition(items) do
+  let text = String.join(items, " ")
+  -- Detect Note/Warning from **Note:** or **Warning:** pattern
+  let kind = if String.starts_with(text, "**Note") do "note"
+    else if String.starts_with(text, "**Warning") do "warning"
+    else "note" end end
+  "<div class=\"admonition " ++ kind ++ "\">" ++ render_inline(text) ++ "</div>"
+end
+
 pfn md_step_text(line, rest, buf, out, go) do
   let t = String.trim(line)
   if is_fence(t) do go(rest, Nil, Cons("<pre><code>", flush_para(buf, out)), true)
   else
     if String.is_empty(t) do go(rest, Nil, flush_para(buf, out), false)
     else
-      match md_heading(t) do
-      Some((tag, content)) ->
-        let close = String.replace_all(tag, "<", "</")
+      -- Unordered list
+      if is_ul_item(t) do
         let flushed = flush_para(buf, out)
-        let hnode = Cons(close, Cons(html_escape(content), Cons(tag, flushed)))
-        go(rest, Nil, hnode, false)
-      None ->
-        go(rest, Cons(t, buf), out, false)
+        let (items, rest2) = collect_ul(rest, Cons(list_item_text(t), Nil))
+        let html = "<ul>" ++ render_list_items(items) ++ "</ul>"
+        go(rest2, Nil, Cons(html, flushed), false)
+      else
+        -- Ordered list
+        if is_ol_item(t) do
+          let flushed = flush_para(buf, out)
+          let (items, rest2) = collect_ol(rest, Cons(list_item_text(t), Nil))
+          let html = "<ol>" ++ render_list_items(items) ++ "</ol>"
+          go(rest2, Nil, Cons(html, flushed), false)
+        else
+          -- Blockquote / admonition
+          if is_admonition(t) do
+            let flushed = flush_para(buf, out)
+            let (items, rest2) = collect_blockquote(rest, Cons(drop_prefix(t, "> "), Nil))
+            let html = render_admonition(items)
+            go(rest2, Nil, Cons(html, flushed), false)
+          else
+            match md_heading(t) do
+            Some((tag, content)) ->
+              let close = String.replace_all(tag, "<", "</")
+              let flushed = flush_para(buf, out)
+              let hnode = Cons(close, Cons(html_escape(content), Cons(tag, flushed)))
+              go(rest, Nil, hnode, false)
+            None ->
+              go(rest, Cons(t, buf), out, false)
+            end
+          end
+        end
       end
     end
   end
