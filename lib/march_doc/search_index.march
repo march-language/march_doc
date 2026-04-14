@@ -26,12 +26,12 @@ end
 
 pfn module_entries(info) do
   match info do
-    ModuleInfo(mod_name, comment_opt, fns, types, ifaces) ->
+    ModuleInfo(mod_name, comment_opt, fns, types, ifaces, _) ->
       let mod_entry = entry(mod_name, "module", mod_name, "", comment_opt)
 
       let fn_entries = List.map(fns, fn e ->
         match e do
-          FnEntry(name, dsig, doc_opt, is_private) ->
+          FnEntry(name, dsig, doc_opt, is_private, _) ->
             let kind = if is_private do "pfn" else "fn" end
             entry(mod_name, kind, name, dsig, doc_opt)
         end
@@ -39,7 +39,7 @@ pfn module_entries(info) do
 
       let type_entries = List.map(types, fn e ->
         match e do
-          TypeEntry(name, dsig, doc_opt) ->
+          TypeEntry(name, dsig, doc_opt, _) ->
             let kind = if String.starts_with(dsig, "ptype") do "ptype" else "type" end
             entry(mod_name, kind, name, dsig, doc_opt)
         end
@@ -47,7 +47,7 @@ pfn module_entries(info) do
 
       let iface_entries = List.map(ifaces, fn e ->
         match e do
-          IfaceEntry(name, dsig, doc_opt, _) ->
+          IfaceEntry(name, dsig, doc_opt, _, _) ->
             entry(mod_name, "interface", name, dsig, doc_opt)
         end
       )

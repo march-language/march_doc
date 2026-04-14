@@ -16,11 +16,11 @@ describe "Parser" do
   describe "direct type construction" do
 
     test "FnEntry fields" do
-      let e = FnEntry("hello", "hello(x : Int) : String", Some("A doc"), false)
+      let e = FnEntry("hello", "hello(x : Int) : String", Some("A doc"), false, 0)
       assert (Parser.is_pub(e) == true)
       assert (Parser.is_prv(e) == false)
       assert (Parser.entry_priv(e) == false)
-      match e do FnEntry(n, s, d, p) ->
+      match e do FnEntry(n, s, d, p, _) ->
         assert (n == "hello")
         assert (s == "hello(x : Int) : String")
         assert (d == Some("A doc"))
@@ -29,11 +29,11 @@ describe "Parser" do
     end
 
     test "FnEntry private" do
-      let e = FnEntry("secret", "secret()", None, true)
+      let e = FnEntry("secret", "secret()", None, true, 0)
       assert (Parser.is_pub(e) == false)
       assert (Parser.is_prv(e) == true)
       assert (Parser.entry_priv(e) == true)
-      match e do FnEntry(n, s, d, p) ->
+      match e do FnEntry(n, s, d, p, _) ->
         assert (n == "secret")
         assert (s == "secret()")
         assert (d == None)
@@ -42,8 +42,8 @@ describe "Parser" do
     end
 
     test "TypeEntry fields" do
-      let t = TypeEntry("Color", "Color = Red | Blue", Some("A color type"))
-      match t do TypeEntry(n, s, d) ->
+      let t = TypeEntry("Color", "Color = Red | Blue", Some("A color type"), 0)
+      match t do TypeEntry(n, s, d, _) ->
         assert (n == "Color")
         assert (s == "Color = Red | Blue")
         assert (d == Some("A color type"))
@@ -51,8 +51,8 @@ describe "Parser" do
     end
 
     test "TypeEntry no doc" do
-      let t = TypeEntry("Shape", "Shape = Circle | Square", None)
-      match t do TypeEntry(n, s, d) ->
+      let t = TypeEntry("Shape", "Shape = Circle | Square", None, 0)
+      match t do TypeEntry(n, s, d, _) ->
         assert (n == "Shape")
         assert (String.contains(s, "Circle"))
         assert (d == None)
@@ -60,8 +60,8 @@ describe "Parser" do
     end
 
     test "IfaceEntry fields" do
-      let i = IfaceEntry("Show", "Show", Some("Show things"), Cons(("show", "fn show(self) : String"), Nil))
-      match i do IfaceEntry(n, s, d, ms) ->
+      let i = IfaceEntry("Show", "Show", Some("Show things"), Cons(("show", "fn show(self) : String"), Nil), 0)
+      match i do IfaceEntry(n, s, d, ms, _) ->
         assert (n == "Show")
         assert (s == "Show")
         assert (d == Some("Show things"))
@@ -70,8 +70,8 @@ describe "Parser" do
     end
 
     test "IfaceEntry no doc" do
-      let i = IfaceEntry("Eq", "Eq", None, Nil)
-      match i do IfaceEntry(n, s, d, ms) ->
+      let i = IfaceEntry("Eq", "Eq", None, Nil, 0)
+      match i do IfaceEntry(n, s, d, ms, _) ->
         assert (n == "Eq")
         assert (d == None)
         assert (List.is_empty(ms))
@@ -79,9 +79,9 @@ describe "Parser" do
     end
 
     test "ModuleInfo fields" do
-      let m = ModuleInfo("MyMod", Some("Module doc"), Cons(FnEntry("f", "f()", None, false), Nil), Cons(TypeEntry("T", "T = A", None), Nil), Nil)
+      let m = ModuleInfo("MyMod", Some("Module doc"), Cons(FnEntry("f", "f()", None, false, 0), Nil), Cons(TypeEntry("T", "T = A", None, 0), Nil), Nil, "")
       assert (Parser.info_name(m) == "MyMod")
-      match m do ModuleInfo(n, c, fns, ts, is) ->
+      match m do ModuleInfo(n, c, fns, ts, is, _) ->
         assert (n == "MyMod")
         assert (c == Some("Module doc"))
         assert (List.length(fns) == 1)
@@ -91,9 +91,9 @@ describe "Parser" do
     end
 
     test "ModuleInfo no comment" do
-      let m = ModuleInfo("Bare", None, Nil, Nil, Nil)
+      let m = ModuleInfo("Bare", None, Nil, Nil, Nil, "")
       assert (Parser.info_name(m) == "Bare")
-      match m do ModuleInfo(_, c, fns, ts, is) ->
+      match m do ModuleInfo(_, c, fns, ts, is, _) ->
         assert (c == None)
         assert (List.is_empty(fns))
         assert (List.is_empty(ts))
@@ -102,14 +102,14 @@ describe "Parser" do
     end
 
     test "info_name extracts name" do
-      assert (Parser.info_name(ModuleInfo("A", None, Nil, Nil, Nil)) == "A")
-      assert (Parser.info_name(ModuleInfo("B", Some("d"), Nil, Nil, Nil)) == "B")
-      assert (Parser.info_name(ModuleInfo("Xyz123", None, Nil, Nil, Nil)) == "Xyz123")
+      assert (Parser.info_name(ModuleInfo("A", None, Nil, Nil, Nil, "")) == "A")
+      assert (Parser.info_name(ModuleInfo("B", Some("d"), Nil, Nil, Nil, "")) == "B")
+      assert (Parser.info_name(ModuleInfo("Xyz123", None, Nil, Nil, Nil, "")) == "Xyz123")
     end
 
     test "is_pub and is_prv are inverses" do
-      let pub = FnEntry("f", "", None, false)
-      let prv = FnEntry("g", "", None, true)
+      let pub = FnEntry("f", "", None, false, 0)
+      let prv = FnEntry("g", "", None, true, 0)
       assert (Parser.is_pub(pub) == true)
       assert (Parser.is_prv(pub) == false)
       assert (Parser.is_pub(prv) == false)
@@ -119,14 +119,14 @@ describe "Parser" do
     end
 
     test "entry_priv matches private flag" do
-      assert (Parser.entry_priv(FnEntry("a", "", None, false)) == false)
-      assert (Parser.entry_priv(FnEntry("b", "", None, true)) == true)
-      assert (Parser.entry_priv(FnEntry("c", "", Some("d"), false)) == false)
-      assert (Parser.entry_priv(FnEntry("d", "", Some("d"), true)) == true)
+      assert (Parser.entry_priv(FnEntry("a", "", None, false, 0)) == false)
+      assert (Parser.entry_priv(FnEntry("b", "", None, true, 0)) == true)
+      assert (Parser.entry_priv(FnEntry("c", "", Some("d"), false, 0)) == false)
+      assert (Parser.entry_priv(FnEntry("d", "", Some("d"), true, 0)) == true)
     end
 
     test "multiple FnEntries in list" do
-      let fns = Cons(FnEntry("a", "a()", None, false), Cons(FnEntry("b", "b()", Some("doc"), true), Nil))
+      let fns = Cons(FnEntry("a", "a()", None, false, 0), Cons(FnEntry("b", "b()", Some("doc"), true, 0), Nil))
       assert (List.length(fns) == 2)
       match List.head_opt(fns) do
         Some(e) -> assert (Parser.is_pub(e))
@@ -135,13 +135,13 @@ describe "Parser" do
     end
 
     test "multiple TypeEntries in list" do
-      let types = Cons(TypeEntry("A", "A = X", None), Cons(TypeEntry("B", "B = Y", Some("d")), Nil))
+      let types = Cons(TypeEntry("A", "A = X", None, 0), Cons(TypeEntry("B", "B = Y", Some("d"), 0), Nil))
       assert (List.length(types) == 2)
     end
 
     test "FnEntry with long signature" do
-      let e = FnEntry("map", "map(list : List(a), f : fn(a) : b) : List(b)", Some("Maps a function over a list"), false)
-      match e do FnEntry(n, s, d, _) ->
+      let e = FnEntry("map", "map(list : List(a), f : fn(a) : b) : List(b)", Some("Maps a function over a list"), false, 0)
+      match e do FnEntry(n, s, d, _, _) ->
         assert (n == "map")
         assert (String.contains(s, "List"))
         assert (String.contains(s, "fn"))
@@ -150,11 +150,11 @@ describe "Parser" do
     end
 
     test "ModuleInfo with many entries" do
-      let fns = Cons(FnEntry("a", "", None, false), Cons(FnEntry("b", "", None, true), Cons(FnEntry("c", "", None, false), Nil)))
-      let types = Cons(TypeEntry("T1", "", None), Cons(TypeEntry("T2", "", None), Nil))
-      let ifaces = Cons(IfaceEntry("I1", "", None, Nil), Nil)
-      let m = ModuleInfo("Big", Some("Big module"), fns, types, ifaces)
-      match m do ModuleInfo(n, c, fs, ts, is) ->
+      let fns = Cons(FnEntry("a", "", None, false, 0), Cons(FnEntry("b", "", None, true, 0), Cons(FnEntry("c", "", None, false, 0), Nil)))
+      let types = Cons(TypeEntry("T1", "", None, 0), Cons(TypeEntry("T2", "", None, 0), Nil))
+      let ifaces = Cons(IfaceEntry("I1", "", None, Nil, 0), Nil)
+      let m = ModuleInfo("Big", Some("Big module"), fns, types, ifaces, "")
+      match m do ModuleInfo(n, c, fs, ts, is, _) ->
         assert (n == "Big")
         assert (List.length(fs) == 3)
         assert (List.length(ts) == 2)
@@ -164,64 +164,64 @@ describe "Parser" do
     end
 
     test "FnEntry doc variants" do
-      let e1 = FnEntry("f1", "f1()", Some("doc1"), false)
-      let e2 = FnEntry("f2", "f2()", Some("doc2"), false)
-      let e3 = FnEntry("f3", "f3()", None, false)
-      match e1 do FnEntry(_, _, d, _) -> assert (d == Some("doc1")) end
-      match e2 do FnEntry(_, _, d, _) -> assert (d == Some("doc2")) end
-      match e3 do FnEntry(_, _, d, _) -> assert (d == None) end
+      let e1 = FnEntry("f1", "f1()", Some("doc1"), false, 0)
+      let e2 = FnEntry("f2", "f2()", Some("doc2"), false, 0)
+      let e3 = FnEntry("f3", "f3()", None, false, 0)
+      match e1 do FnEntry(_, _, d, _, _) -> assert (d == Some("doc1")) end
+      match e2 do FnEntry(_, _, d, _, _) -> assert (d == Some("doc2")) end
+      match e3 do FnEntry(_, _, d, _, _) -> assert (d == None) end
     end
 
     test "FnEntry name variants" do
-      assert (Parser.is_pub(FnEntry("alpha", "alpha()", None, false)))
-      assert (Parser.is_pub(FnEntry("beta", "beta(x)", None, false)))
-      assert (Parser.is_pub(FnEntry("gamma", "gamma(x, y)", None, false)))
-      assert (Parser.is_prv(FnEntry("delta", "delta()", None, true)))
-      assert (Parser.is_prv(FnEntry("epsilon", "epsilon(x)", None, true)))
+      assert (Parser.is_pub(FnEntry("alpha", "alpha()", None, false, 0)))
+      assert (Parser.is_pub(FnEntry("beta", "beta(x)", None, false, 0)))
+      assert (Parser.is_pub(FnEntry("gamma", "gamma(x, y)", None, false, 0)))
+      assert (Parser.is_prv(FnEntry("delta", "delta()", None, true, 0)))
+      assert (Parser.is_prv(FnEntry("epsilon", "epsilon(x)", None, true, 0)))
     end
 
     test "TypeEntry sig variants" do
-      let t1 = TypeEntry("A", "A = X | Y", None)
-      let t2 = TypeEntry("B", "B = X(Int) | Y(String)", Some("docs"))
-      let t3 = TypeEntry("C", "ptype C = P | Q", None)
-      match t1 do TypeEntry(n, s, _) ->
+      let t1 = TypeEntry("A", "A = X | Y", None, 0)
+      let t2 = TypeEntry("B", "B = X(Int) | Y(String)", Some("docs"), 0)
+      let t3 = TypeEntry("C", "ptype C = P | Q", None, 0)
+      match t1 do TypeEntry(n, s, _, _) ->
         assert (n == "A")
         assert (String.contains(s, "X"))
         assert (String.contains(s, "Y"))
       end
-      match t2 do TypeEntry(n, s, d) ->
+      match t2 do TypeEntry(n, s, d, _) ->
         assert (n == "B")
         assert (String.contains(s, "Int"))
         assert (d == Some("docs"))
       end
-      match t3 do TypeEntry(n, s, _) ->
+      match t3 do TypeEntry(n, s, _, _) ->
         assert (n == "C")
         assert (String.contains(s, "ptype"))
       end
     end
 
     test "IfaceEntry method lists" do
-      let i1 = IfaceEntry("I1", "I1", None, Nil)
-      let i2 = IfaceEntry("I2", "I2", None, Cons(("m1", "fn m1() : Int"), Nil))
-      let i3 = IfaceEntry("I3", "I3", Some("doc"), Cons(("m1", ""), Cons(("m2", ""), Nil)))
-      match i1 do IfaceEntry(_, _, _, ms) -> assert (List.is_empty(ms)) end
-      match i2 do IfaceEntry(_, _, _, ms) -> assert (List.length(ms) == 1) end
-      match i3 do IfaceEntry(_, _, d, ms) ->
+      let i1 = IfaceEntry("I1", "I1", None, Nil, 0)
+      let i2 = IfaceEntry("I2", "I2", None, Cons(("m1", "fn m1() : Int"), Nil), 0)
+      let i3 = IfaceEntry("I3", "I3", Some("doc"), Cons(("m1", ""), Cons(("m2", ""), Nil)), 0)
+      match i1 do IfaceEntry(_, _, _, ms, _) -> assert (List.is_empty(ms)) end
+      match i2 do IfaceEntry(_, _, _, ms, _) -> assert (List.length(ms) == 1) end
+      match i3 do IfaceEntry(_, _, d, ms, _) ->
         assert (List.length(ms) == 2)
         assert (d == Some("doc"))
       end
     end
 
     test "ModuleInfo comment variants" do
-      let m1 = ModuleInfo("M1", None, Nil, Nil, Nil)
-      let m2 = ModuleInfo("M2", Some("short"), Nil, Nil, Nil)
-      let m3 = ModuleInfo("M3", Some("a longer module comment with details"), Nil, Nil, Nil)
+      let m1 = ModuleInfo("M1", None, Nil, Nil, Nil, "")
+      let m2 = ModuleInfo("M2", Some("short"), Nil, Nil, Nil, "")
+      let m3 = ModuleInfo("M3", Some("a longer module comment with details"), Nil, Nil, Nil, "")
       assert (Parser.info_name(m1) == "M1")
       assert (Parser.info_name(m2) == "M2")
       assert (Parser.info_name(m3) == "M3")
-      match m1 do ModuleInfo(_, c, _, _, _) -> assert (c == None) end
-      match m2 do ModuleInfo(_, c, _, _, _) -> assert (c == Some("short")) end
-      match m3 do ModuleInfo(_, c, _, _, _) ->
+      match m1 do ModuleInfo(_, c, _, _, _, _) -> assert (c == None) end
+      match m2 do ModuleInfo(_, c, _, _, _, _) -> assert (c == Some("short")) end
+      match m3 do ModuleInfo(_, c, _, _, _, _) ->
         match c do
           Some(t) -> assert (String.contains(t, "longer"))
           None -> assert false
@@ -230,46 +230,46 @@ describe "Parser" do
     end
 
     test "FnEntry equality checks" do
-      let e1 = FnEntry("f", "f()", None, false)
-      let e2 = FnEntry("f", "f()", None, false)
-      let e3 = FnEntry("g", "g()", None, true)
-      match e1 do FnEntry(n1, _, _, _) ->
-        match e2 do FnEntry(n2, _, _, _) -> assert (n1 == n2) end
+      let e1 = FnEntry("f", "f()", None, false, 0)
+      let e2 = FnEntry("f", "f()", None, false, 0)
+      let e3 = FnEntry("g", "g()", None, true, 0)
+      match e1 do FnEntry(n1, _, _, _, _) ->
+        match e2 do FnEntry(n2, _, _, _, _) -> assert (n1 == n2) end
       end
-      match e3 do FnEntry(n3, _, _, p3) ->
+      match e3 do FnEntry(n3, _, _, p3, _) ->
         assert (n3 == "g")
         assert (p3 == true)
       end
     end
 
     test "info_name on various modules" do
-      assert (Parser.info_name(ModuleInfo("String", None, Nil, Nil, Nil)) == "String")
-      assert (Parser.info_name(ModuleInfo("List", None, Nil, Nil, Nil)) == "List")
-      assert (Parser.info_name(ModuleInfo("IO", None, Nil, Nil, Nil)) == "IO")
-      assert (Parser.info_name(ModuleInfo("File", None, Nil, Nil, Nil)) == "File")
-      assert (Parser.info_name(ModuleInfo("MyApp", None, Nil, Nil, Nil)) == "MyApp")
-      assert (Parser.info_name(ModuleInfo("Unknown", None, Nil, Nil, Nil)) == "Unknown")
+      assert (Parser.info_name(ModuleInfo("String", None, Nil, Nil, Nil, "")) == "String")
+      assert (Parser.info_name(ModuleInfo("List", None, Nil, Nil, Nil, "")) == "List")
+      assert (Parser.info_name(ModuleInfo("IO", None, Nil, Nil, Nil, "")) == "IO")
+      assert (Parser.info_name(ModuleInfo("File", None, Nil, Nil, Nil, "")) == "File")
+      assert (Parser.info_name(ModuleInfo("MyApp", None, Nil, Nil, Nil, "")) == "MyApp")
+      assert (Parser.info_name(ModuleInfo("Unknown", None, Nil, Nil, Nil, "")) == "Unknown")
     end
 
     test "is_pub on many entries" do
-      assert (Parser.is_pub(FnEntry("a", "", None, false)) == true)
-      assert (Parser.is_pub(FnEntry("b", "", Some("d"), false)) == true)
-      assert (Parser.is_pub(FnEntry("c", "c(x)", None, false)) == true)
-      assert (Parser.is_pub(FnEntry("d", "", None, true)) == false)
-      assert (Parser.is_pub(FnEntry("e", "", Some("d"), true)) == false)
+      assert (Parser.is_pub(FnEntry("a", "", None, false, 0)) == true)
+      assert (Parser.is_pub(FnEntry("b", "", Some("d"), false, 0)) == true)
+      assert (Parser.is_pub(FnEntry("c", "c(x)", None, false, 0)) == true)
+      assert (Parser.is_pub(FnEntry("d", "", None, true, 0)) == false)
+      assert (Parser.is_pub(FnEntry("e", "", Some("d"), true, 0)) == false)
     end
 
     test "is_prv on many entries" do
-      assert (Parser.is_prv(FnEntry("a", "", None, true)) == true)
-      assert (Parser.is_prv(FnEntry("b", "", Some("d"), true)) == true)
-      assert (Parser.is_prv(FnEntry("c", "c(x)", None, true)) == true)
-      assert (Parser.is_prv(FnEntry("d", "", None, false)) == false)
-      assert (Parser.is_prv(FnEntry("e", "", Some("d"), false)) == false)
+      assert (Parser.is_prv(FnEntry("a", "", None, true, 0)) == true)
+      assert (Parser.is_prv(FnEntry("b", "", Some("d"), true, 0)) == true)
+      assert (Parser.is_prv(FnEntry("c", "c(x)", None, true, 0)) == true)
+      assert (Parser.is_prv(FnEntry("d", "", None, false, 0)) == false)
+      assert (Parser.is_prv(FnEntry("e", "", Some("d"), false, 0)) == false)
     end
 
     test "entry_priv consistent with is_pub is_prv" do
-      let pub = FnEntry("pub", "", None, false)
-      let prv = FnEntry("prv", "", None, true)
+      let pub = FnEntry("pub", "", None, false, 0)
+      let prv = FnEntry("prv", "", None, true, 0)
       assert (Parser.entry_priv(pub) == false)
       assert (Parser.entry_priv(prv) == true)
       assert (Parser.is_pub(pub) == !Parser.entry_priv(pub))
@@ -279,15 +279,15 @@ describe "Parser" do
     end
 
     test "ModuleInfo fn list operations" do
-      let fns = Cons(FnEntry("x", "x()", Some("xd"), false), Cons(FnEntry("y", "y()", None, true), Nil))
-      let m = ModuleInfo("M", None, fns, Nil, Nil)
-      match m do ModuleInfo(_, _, fs, _, _) ->
+      let fns = Cons(FnEntry("x", "x()", Some("xd"), false, 0), Cons(FnEntry("y", "y()", None, true, 0), Nil))
+      let m = ModuleInfo("M", None, fns, Nil, Nil, "")
+      match m do ModuleInfo(_, _, fs, _, _, _) ->
         assert (List.length(fs) == 2)
         assert (!List.is_empty(fs))
         match List.head_opt(fs) do
           Some(e) ->
             assert (Parser.is_pub(e))
-            match e do FnEntry(n, _, d, _) ->
+            match e do FnEntry(n, _, d, _, _) ->
               assert (n == "x")
               assert (d == Some("xd"))
             end
@@ -297,10 +297,10 @@ describe "Parser" do
     end
 
     test "TypeEntry list operations" do
-      let ts = Cons(TypeEntry("T1", "T1 = A", Some("td")), Cons(TypeEntry("T2", "T2 = B", None), Nil))
+      let ts = Cons(TypeEntry("T1", "T1 = A", Some("td"), 0), Cons(TypeEntry("T2", "T2 = B", None, 0), Nil))
       assert (List.length(ts) == 2)
       match List.head_opt(ts) do
-        Some(te) -> match te do TypeEntry(n, _, d) ->
+        Some(te) -> match te do TypeEntry(n, _, d, _) ->
           assert (n == "T1")
           assert (d == Some("td"))
         end
@@ -309,10 +309,10 @@ describe "Parser" do
     end
 
     test "IfaceEntry list operations" do
-      let is = Cons(IfaceEntry("I1", "I1", Some("id"), Nil), Cons(IfaceEntry("I2", "I2", None, Nil), Nil))
+      let is = Cons(IfaceEntry("I1", "I1", Some("id"), Nil, 0), Cons(IfaceEntry("I2", "I2", None, Nil, 0), Nil))
       assert (List.length(is) == 2)
       match List.head_opt(is) do
-        Some(ie) -> match ie do IfaceEntry(n, _, d, _) ->
+        Some(ie) -> match ie do IfaceEntry(n, _, d, _, _) ->
           assert (n == "I1")
           assert (d == Some("id"))
         end
@@ -321,8 +321,8 @@ describe "Parser" do
     end
 
     test "FnEntry sig contains params" do
-      let e = FnEntry("map", "map(list : List(a), f : fn(a) : b) : List(b)", None, false)
-      match e do FnEntry(_, s, _, _) ->
+      let e = FnEntry("map", "map(list : List(a), f : fn(a) : b) : List(b)", None, false, 0)
+      match e do FnEntry(_, s, _, _, _) ->
         assert (String.contains(s, "map"))
         assert (String.contains(s, "list"))
         assert (String.contains(s, "List"))
@@ -332,12 +332,12 @@ describe "Parser" do
     end
 
     test "ModuleInfo with all entry types" do
-      let fns = Cons(FnEntry("f", "", None, false), Nil)
-      let types = Cons(TypeEntry("T", "", None), Nil)
-      let ifaces = Cons(IfaceEntry("I", "", None, Nil), Nil)
-      let m = ModuleInfo("AllTypes", Some("Has everything"), fns, types, ifaces)
+      let fns = Cons(FnEntry("f", "", None, false, 0), Nil)
+      let types = Cons(TypeEntry("T", "", None, 0), Nil)
+      let ifaces = Cons(IfaceEntry("I", "", None, Nil, 0), Nil)
+      let m = ModuleInfo("AllTypes", Some("Has everything"), fns, types, ifaces, "")
       assert (Parser.info_name(m) == "AllTypes")
-      match m do ModuleInfo(n, c, fs, ts, is) ->
+      match m do ModuleInfo(n, c, fs, ts, is, _) ->
         assert (n == "AllTypes")
         assert (!List.is_empty(fs))
         assert (!List.is_empty(ts))
@@ -347,40 +347,40 @@ describe "Parser" do
     end
 
     test "FnEntry various signatures" do
-      let e1 = FnEntry("read", "read(path : String) : Result(String, Error)", None, false)
-      let e2 = FnEntry("write", "write(path : String, data : String) : Result((), Error)", None, false)
-      let e3 = FnEntry("delete", "delete(path : String) : Result((), Error)", Some("Deletes a file"), false)
-      match e1 do FnEntry(n, s, _, _) ->
+      let e1 = FnEntry("read", "read(path : String) : Result(String, Error)", None, false, 0)
+      let e2 = FnEntry("write", "write(path : String, data : String) : Result((), Error)", None, false, 0)
+      let e3 = FnEntry("delete", "delete(path : String) : Result((), Error)", Some("Deletes a file"), false, 0)
+      match e1 do FnEntry(n, s, _, _, _) ->
         assert (n == "read")
         assert (String.contains(s, "Result"))
         assert (String.contains(s, "path"))
       end
-      match e2 do FnEntry(n, s, _, _) ->
+      match e2 do FnEntry(n, s, _, _, _) ->
         assert (n == "write")
         assert (String.contains(s, "data"))
       end
-      match e3 do FnEntry(n, _, d, _) ->
+      match e3 do FnEntry(n, _, d, _, _) ->
         assert (n == "delete")
         assert (d == Some("Deletes a file"))
       end
     end
 
     test "TypeEntry various constructors" do
-      let t1 = TypeEntry("Option", "Option(a) = Some(a) | None", None)
-      let t2 = TypeEntry("Result", "Result(a, e) = Ok(a) | Err(e)", Some("Result type"))
-      let t3 = TypeEntry("List", "List(a) = Nil | Cons(a, List(a))", None)
-      match t1 do TypeEntry(n, s, _) ->
+      let t1 = TypeEntry("Option", "Option(a) = Some(a) | None", None, 0)
+      let t2 = TypeEntry("Result", "Result(a, e) = Ok(a) | Err(e)", Some("Result type"), 0)
+      let t3 = TypeEntry("List", "List(a) = Nil | Cons(a, List(a))", None, 0)
+      match t1 do TypeEntry(n, s, _, _) ->
         assert (n == "Option")
         assert (String.contains(s, "Some"))
         assert (String.contains(s, "None"))
       end
-      match t2 do TypeEntry(n, s, d) ->
+      match t2 do TypeEntry(n, s, d, _) ->
         assert (n == "Result")
         assert (String.contains(s, "Ok"))
         assert (String.contains(s, "Err"))
         assert (d == Some("Result type"))
       end
-      match t3 do TypeEntry(n, s, _) ->
+      match t3 do TypeEntry(n, s, _, _) ->
         assert (n == "List")
         assert (String.contains(s, "Nil"))
         assert (String.contains(s, "Cons"))
@@ -388,14 +388,14 @@ describe "Parser" do
     end
 
     test "ModuleInfo empty vs populated" do
-      let empty = ModuleInfo("E", None, Nil, Nil, Nil)
-      let full = ModuleInfo("F", Some("doc"), Cons(FnEntry("f", "", None, false), Nil), Cons(TypeEntry("T", "", None), Nil), Cons(IfaceEntry("I", "", None, Nil), Nil))
-      match empty do ModuleInfo(_, _, fs, ts, is) ->
+      let empty = ModuleInfo("E", None, Nil, Nil, Nil, "")
+      let full = ModuleInfo("F", Some("doc"), Cons(FnEntry("f", "", None, false, 0), Nil), Cons(TypeEntry("T", "", None, 0), Nil), Cons(IfaceEntry("I", "", None, Nil, 0), Nil), "")
+      match empty do ModuleInfo(_, _, fs, ts, is, _) ->
         assert (List.is_empty(fs))
         assert (List.is_empty(ts))
         assert (List.is_empty(is))
       end
-      match full do ModuleInfo(_, c, fs, ts, is) ->
+      match full do ModuleInfo(_, c, fs, ts, is, _) ->
         assert (!List.is_empty(fs))
         assert (!List.is_empty(ts))
         assert (!List.is_empty(is))
@@ -404,7 +404,7 @@ describe "Parser" do
     end
 
     test "FnEntry private flags comprehensive" do
-      let entries = Cons(FnEntry("a", "", None, false), Cons(FnEntry("b", "", None, true), Cons(FnEntry("c", "", None, false), Cons(FnEntry("d", "", None, true), Nil))))
+      let entries = Cons(FnEntry("a", "", None, false, 0), Cons(FnEntry("b", "", None, true, 0), Cons(FnEntry("c", "", None, false, 0), Cons(FnEntry("d", "", None, true, 0), Nil))))
       assert (List.length(entries) == 4)
       assert (Parser.is_pub(List.nth(entries, 0)))
       assert (Parser.is_prv(List.nth(entries, 1)))
@@ -413,40 +413,40 @@ describe "Parser" do
     end
 
     test "info_name consistency" do
-      let m = ModuleInfo("TestName", None, Nil, Nil, Nil)
+      let m = ModuleInfo("TestName", None, Nil, Nil, Nil, "")
       assert (Parser.info_name(m) == "TestName")
       assert (Parser.info_name(m) == Parser.info_name(m))
       assert (String.byte_size(Parser.info_name(m)) == 8)
     end
 
     test "FnEntry sig lengths" do
-      let short = FnEntry("f", "f()", None, false)
-      let long = FnEntry("map", "map(lst : List(a), f : fn(a) : b) : List(b)", None, false)
-      match short do FnEntry(_, s, _, _) -> assert (String.byte_size(s) == 3) end
-      match long do FnEntry(_, s, _, _) -> assert (String.byte_size(s) > 20) end
+      let short = FnEntry("f", "f()", None, false, 0)
+      let long = FnEntry("map", "map(lst : List(a), f : fn(a) : b) : List(b)", None, false, 0)
+      match short do FnEntry(_, s, _, _, _) -> assert (String.byte_size(s) == 3) end
+      match long do FnEntry(_, s, _, _, _) -> assert (String.byte_size(s) > 20) end
     end
 
     test "TypeEntry with and without doc" do
-      let with_doc = TypeEntry("A", "A = X", Some("Has doc"))
-      let no_doc = TypeEntry("B", "B = Y", None)
-      match with_doc do TypeEntry(_, _, d) ->
+      let with_doc = TypeEntry("A", "A = X", Some("Has doc"), 0)
+      let no_doc = TypeEntry("B", "B = Y", None, 0)
+      match with_doc do TypeEntry(_, _, d, _) ->
         match d do Some(t) -> assert (t == "Has doc") | None -> assert false end
       end
-      match no_doc do TypeEntry(_, _, d) -> assert (d == None) end
+      match no_doc do TypeEntry(_, _, d, _) -> assert (d == None) end
     end
 
     test "IfaceEntry with and without doc" do
-      let with_doc = IfaceEntry("A", "A", Some("Has doc"), Nil)
-      let no_doc = IfaceEntry("B", "B", None, Nil)
-      match with_doc do IfaceEntry(_, _, d, _) ->
+      let with_doc = IfaceEntry("A", "A", Some("Has doc"), Nil, 0)
+      let no_doc = IfaceEntry("B", "B", None, Nil, 0)
+      match with_doc do IfaceEntry(_, _, d, _, _) ->
         match d do Some(t) -> assert (t == "Has doc") | None -> assert false end
       end
-      match no_doc do IfaceEntry(_, _, d, _) -> assert (d == None) end
+      match no_doc do IfaceEntry(_, _, d, _, _) -> assert (d == None) end
     end
 
     test "FnEntry doc string content" do
-      let e = FnEntry("parse", "parse(s : String) : AST", Some("Parses a string into an AST node"), false)
-      match e do FnEntry(n, s, d, p) ->
+      let e = FnEntry("parse", "parse(s : String) : AST", Some("Parses a string into an AST node"), false, 0)
+      match e do FnEntry(n, s, d, p, _) ->
         assert (n == "parse")
         assert (String.contains(s, "String"))
         assert (String.contains(s, "AST"))
@@ -462,11 +462,11 @@ describe "Parser" do
     end
 
     test "ModuleInfo list lengths" do
-      let fns3 = Cons(FnEntry("a", "", None, false), Cons(FnEntry("b", "", None, false), Cons(FnEntry("c", "", None, false), Nil)))
-      let types2 = Cons(TypeEntry("T1", "", None), Cons(TypeEntry("T2", "", None), Nil))
-      let ifaces1 = Cons(IfaceEntry("I", "", None, Nil), Nil)
-      let m = ModuleInfo("M", None, fns3, types2, ifaces1)
-      match m do ModuleInfo(_, _, fs, ts, is) ->
+      let fns3 = Cons(FnEntry("a", "", None, false, 0), Cons(FnEntry("b", "", None, false, 0), Cons(FnEntry("c", "", None, false, 0), Nil)))
+      let types2 = Cons(TypeEntry("T1", "", None, 0), Cons(TypeEntry("T2", "", None, 0), Nil))
+      let ifaces1 = Cons(IfaceEntry("I", "", None, Nil, 0), Nil)
+      let m = ModuleInfo("M", None, fns3, types2, ifaces1, "")
+      match m do ModuleInfo(_, _, fs, ts, is, _) ->
         assert (List.length(fs) == 3)
         assert (List.length(ts) == 2)
         assert (List.length(is) == 1)
@@ -476,7 +476,7 @@ describe "Parser" do
     end
 
     test "entry_priv on list of entries" do
-      let entries = Cons(FnEntry("a", "", None, false), Cons(FnEntry("b", "", None, true), Cons(FnEntry("c", "", None, false), Nil)))
+      let entries = Cons(FnEntry("a", "", None, false, 0), Cons(FnEntry("b", "", None, true, 0), Cons(FnEntry("c", "", None, false, 0), Nil)))
       let priv_count = List.length(List.filter(entries, fn e -> Parser.entry_priv(e)))
       let pub_count = List.length(List.filter(entries, fn e -> Parser.is_pub(e)))
       assert (priv_count == 1)
@@ -485,7 +485,7 @@ describe "Parser" do
     end
 
     test "ModuleInfo name extraction from various" do
-      let modules = Cons(ModuleInfo("Alpha", None, Nil, Nil, Nil), Cons(ModuleInfo("Beta", None, Nil, Nil, Nil), Cons(ModuleInfo("Gamma", None, Nil, Nil, Nil), Nil)))
+      let modules = Cons(ModuleInfo("Alpha", None, Nil, Nil, Nil, ""), Cons(ModuleInfo("Beta", None, Nil, Nil, Nil, ""), Cons(ModuleInfo("Gamma", None, Nil, Nil, Nil, ""), Nil)))
       let names = List.map(modules, fn m -> Parser.info_name(m))
       assert (List.length(names) == 3)
       match List.head_opt(names) do
@@ -495,8 +495,8 @@ describe "Parser" do
     end
 
     test "FnEntry string operations" do
-      let e = FnEntry("hello_world", "hello_world(name : String) : String", Some("Says hello"), false)
-      match e do FnEntry(n, s, d, _) ->
+      let e = FnEntry("hello_world", "hello_world(name : String) : String", Some("Says hello"), false, 0)
+      match e do FnEntry(n, s, d, _, _) ->
         assert (String.starts_with(n, "hello"))
         assert (String.ends_with(n, "world"))
         assert (String.contains(n, "_"))
@@ -507,8 +507,8 @@ describe "Parser" do
     end
 
     test "TypeEntry string operations" do
-      let t = TypeEntry("BinaryTree", "BinaryTree(a) = Leaf(a) | Node(BinaryTree(a), BinaryTree(a))", Some("A recursive tree type"))
-      match t do TypeEntry(n, s, d) ->
+      let t = TypeEntry("BinaryTree", "BinaryTree(a) = Leaf(a) | Node(BinaryTree(a), BinaryTree(a))", Some("A recursive tree type"), 0)
+      match t do TypeEntry(n, s, d, _) ->
         assert (String.starts_with(n, "Binary"))
         assert (String.ends_with(n, "Tree"))
         assert (String.byte_size(n) == 10)
@@ -525,8 +525,8 @@ describe "Parser" do
     end
 
     test "IfaceEntry string operations" do
-      let i = IfaceEntry("Serializable", "Serializable", Some("Converts to bytes"), Cons(("serialize", "fn serialize(self) : Bytes"), Nil))
-      match i do IfaceEntry(n, s, d, ms) ->
+      let i = IfaceEntry("Serializable", "Serializable", Some("Converts to bytes"), Cons(("serialize", "fn serialize(self) : Bytes"), Nil), 0)
+      match i do IfaceEntry(n, s, d, ms, _) ->
         assert (n == "Serializable")
         assert (s == "Serializable")
         assert (String.byte_size(n) == 12)
@@ -541,36 +541,36 @@ describe "Parser" do
     end
 
     test "mixed entry types in module" do
-      let pub_fn = FnEntry("public_api", "public_api() : String", Some("Public API"), false)
-      let prv_fn = FnEntry("internal", "internal()", None, true)
-      let typ = TypeEntry("Config", "Config = Config(String, Int)", Some("Configuration"))
-      let iface = IfaceEntry("Plugin", "Plugin", Some("Plugin interface"), Nil)
+      let pub_fn = FnEntry("public_api", "public_api() : String", Some("Public API"), false, 0)
+      let prv_fn = FnEntry("internal", "internal()", None, true, 0)
+      let typ = TypeEntry("Config", "Config = Config(String, Int)", Some("Configuration"), 0)
+      let iface = IfaceEntry("Plugin", "Plugin", Some("Plugin interface"), Nil, 0)
       assert (Parser.is_pub(pub_fn))
       assert (Parser.is_prv(prv_fn))
       assert (!Parser.is_pub(prv_fn))
       assert (!Parser.is_prv(pub_fn))
-      match pub_fn do FnEntry(n, _, d, _) ->
+      match pub_fn do FnEntry(n, _, d, _, _) ->
         assert (n == "public_api")
         match d do Some(t) -> assert (String.contains(t, "Public")) | None -> assert false end
       end
-      match typ do TypeEntry(n, s, d) ->
+      match typ do TypeEntry(n, s, d, _) ->
         assert (n == "Config")
         assert (String.contains(s, "String"))
         match d do Some(t) -> assert (t == "Configuration") | None -> assert false end
       end
-      match iface do IfaceEntry(n, _, d, _) ->
+      match iface do IfaceEntry(n, _, d, _, _) ->
         assert (n == "Plugin")
         match d do Some(t) -> assert (String.contains(t, "interface")) | None -> assert false end
       end
     end
 
     test "large module construction" do
-      let fns = Cons(FnEntry("f1", "f1()", None, false), Cons(FnEntry("f2", "f2()", Some("d2"), false), Cons(FnEntry("f3", "f3()", None, true), Cons(FnEntry("f4", "f4()", Some("d4"), true), Cons(FnEntry("f5", "f5()", None, false), Nil)))))
-      let types = Cons(TypeEntry("T1", "T1 = A", None), Cons(TypeEntry("T2", "T2 = B", Some("td")), Cons(TypeEntry("T3", "T3 = C", None), Nil)))
-      let ifaces = Cons(IfaceEntry("I1", "I1", None, Nil), Cons(IfaceEntry("I2", "I2", Some("id"), Nil), Nil))
-      let m = ModuleInfo("LargeMod", Some("A large module"), fns, types, ifaces)
+      let fns = Cons(FnEntry("f1", "f1()", None, false, 0), Cons(FnEntry("f2", "f2()", Some("d2"), false, 0), Cons(FnEntry("f3", "f3()", None, true, 0), Cons(FnEntry("f4", "f4()", Some("d4"), true, 0), Cons(FnEntry("f5", "f5()", None, false, 0), Nil)))))
+      let types = Cons(TypeEntry("T1", "T1 = A", None, 0), Cons(TypeEntry("T2", "T2 = B", Some("td"), 0), Cons(TypeEntry("T3", "T3 = C", None, 0), Nil)))
+      let ifaces = Cons(IfaceEntry("I1", "I1", None, Nil, 0), Cons(IfaceEntry("I2", "I2", Some("id"), Nil, 0), Nil))
+      let m = ModuleInfo("LargeMod", Some("A large module"), fns, types, ifaces, "")
       assert (Parser.info_name(m) == "LargeMod")
-      match m do ModuleInfo(_, c, fs, ts, is) ->
+      match m do ModuleInfo(_, c, fs, ts, is, _) ->
         assert (List.length(fs) == 5)
         assert (List.length(ts) == 3)
         assert (List.length(is) == 2)
@@ -591,7 +591,7 @@ describe "Parser" do
         None -> assert false
         Some(info) ->
           assert (Parser.info_name(info) == "Sample")
-          match info do ModuleInfo(_, _, fns, _, _) -> assert (List.length(fns) == 1) end
+          match info do ModuleInfo(_, _, fns, _, _, _) -> assert (List.length(fns) == 1) end
       end
     end
 
@@ -599,11 +599,11 @@ describe "Parser" do
       match parse_src("doc1", "mod DT do\n\ndoc \"This is hello\"\nfn hello() do 42 end\n\nend", false) do
         None -> assert false
         Some(info) ->
-          match info do ModuleInfo(_, _, fns, _, _) ->
+          match info do ModuleInfo(_, _, fns, _, _, _) ->
             assert (List.length(fns) == 1)
             match List.head_opt(fns) do
               None -> assert false
-              Some(e) -> match e do FnEntry(name, _, d, _) ->
+              Some(e) -> match e do FnEntry(name, _, d, _, _) ->
                 assert (name == "hello")
                 assert (d == Some("This is hello"))
               end
@@ -615,11 +615,11 @@ describe "Parser" do
     test "type declarations" do
       match parse_src("type1", "mod TT do\n\ntype Color = Red | Blue | Green\n\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, types, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, _, types, _, _) ->
           assert (List.length(types) == 1)
           match List.head_opt(types) do
             None -> assert false
-            Some(te) -> match te do TypeEntry(name, s, _) ->
+            Some(te) -> match te do TypeEntry(name, s, _, _) ->
               assert (name == "Color")
               assert (String.contains(s, "Red"))
               assert (String.contains(s, "Blue"))
@@ -633,11 +633,11 @@ describe "Parser" do
     test "excludes private by default" do
       match parse_src("excl", "mod PT do\npfn secret() do 42 end\nfn public_fn() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           assert (List.length(fns) == 1)
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(name, _, _, p) ->
+            Some(e) -> match e do FnEntry(name, _, _, p, _) ->
               assert (name == "public_fn")
               assert (p == false)
             end
@@ -649,7 +649,7 @@ describe "Parser" do
     test "includes private when flag set" do
       match parse_src("incl", "mod PT2 do\npfn secret() do 42 end\nfn pub() do 1 end\nend", true) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           assert (List.length(fns) == 2)
         end
       end
@@ -665,7 +665,7 @@ describe "Parser" do
     test "module comment with spaces" do
       match parse_src("comment", "-- This module does things.\n-- It is useful.\n\nmod Co do\nfn foo() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, comment, _, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, comment, _, _, _, _) ->
           match comment do
             None -> assert false
             Some(c) ->
@@ -679,7 +679,7 @@ describe "Parser" do
     test "module comment without space" do
       match parse_src("nospace", "--NoSpace\n--Also\nmod Da do\nfn f() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, comment, _, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, comment, _, _, _, _) ->
           match comment do
             None -> assert false
             Some(c) ->
@@ -693,10 +693,10 @@ describe "Parser" do
     test "triple-quoted doc string" do
       match parse_src("triple", "mod TT do\n\ndoc \"\"\"\nLine one.\nLine two.\n\"\"\"\nfn documented() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _) ->
+            Some(e) -> match e do FnEntry(_, _, d, _, _) ->
               match d do
                 None -> assert false
                 Some(txt) ->
@@ -712,11 +712,11 @@ describe "Parser" do
     test "interface declaration" do
       match parse_src("iface", "mod IT do\ninterface Printable do\n  fn to_string(self) : String\nend\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, _, ifaces) ->
+        Some(info) -> match info do ModuleInfo(_, _, _, _, ifaces, _) ->
           assert (List.length(ifaces) == 1)
           match List.head_opt(ifaces) do
             None -> assert false
-            Some(ie) -> match ie do IfaceEntry(name, s, _, _) ->
+            Some(ie) -> match ie do IfaceEntry(name, s, _, _, _) ->
               assert (name == "Printable")
               assert (String.contains(s, "Printable"))
             end
@@ -728,10 +728,10 @@ describe "Parser" do
     test "ptype declaration" do
       match parse_src("ptype", "mod Pt do\nptype Internal = A | B\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, types, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, _, types, _, _) ->
           match List.head_opt(types) do
             None -> assert false
-            Some(te) -> match te do TypeEntry(name, s, _) ->
+            Some(te) -> match te do TypeEntry(name, s, _, _) ->
               assert (name == "Internal")
               assert (String.contains(s, "ptype"))
               assert (String.contains(s, "Internal"))
@@ -744,10 +744,10 @@ describe "Parser" do
     test "function signature" do
       match parse_src("st", "mod ST do\nfn add(a : Int, b : Int) : Int do a + b end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(name, s, _, _) ->
+            Some(e) -> match e do FnEntry(name, s, _, _, _) ->
               assert (name == "add")
               assert (String.contains(s, "Int"))
               assert (String.contains(s, "add"))
@@ -781,7 +781,7 @@ describe "Parser" do
         None -> assert false
         Some(info) ->
           assert (Parser.info_name(info) == "Unknown")
-          match info do ModuleInfo(_, _, fns, _, _) -> assert (List.length(fns) == 1) end
+          match info do ModuleInfo(_, _, fns, _, _, _) -> assert (List.length(fns) == 1) end
       end
     end
 
@@ -790,7 +790,7 @@ describe "Parser" do
         None -> assert false
         Some(info) ->
           assert (Parser.info_name(info) == "EmptyMod")
-          match info do ModuleInfo(_, _, fns, types, ifaces) ->
+          match info do ModuleInfo(_, _, fns, types, ifaces, _) ->
             assert (List.is_empty(fns))
             assert (List.is_empty(types))
             assert (List.is_empty(ifaces))
@@ -801,11 +801,11 @@ describe "Parser" do
     test "nested function not extracted" do
       match parse_src("nested", "mod Ne do\nfn outer() do\n  fn inner() do 1 end\n  inner()\nend\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           assert (List.length(fns) == 1)
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(name, _, _, _) -> assert (name == "outer") end
+            Some(e) -> match e do FnEntry(name, _, _, _, _) -> assert (name == "outer") end
           end
         end
       end
@@ -814,7 +814,7 @@ describe "Parser" do
     test "unterminated triple-quote" do
       match parse_src("unterm", "mod Un do\ndoc \"\"\"\nUnclosed\nfn foo() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) -> assert (List.length(fns) == 0) end
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) -> assert (List.length(fns) == 0) end
       end
     end
 
@@ -828,7 +828,7 @@ describe "Parser" do
     test "unrecognized lines ignored" do
       match parse_src("ur", "mod UR do\nlet x = 42\nimport Foo\nfn f() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, types, ifaces) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, types, ifaces, _) ->
           assert (List.length(fns) == 1)
           assert (List.length(types) == 0)
           assert (List.length(ifaces) == 0)
@@ -839,17 +839,17 @@ describe "Parser" do
     test "empty lines handled" do
       match parse_src("el", "mod EL do\n\n\n\nfn f() do 1 end\n\n\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) -> assert (List.length(fns) == 1) end
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) -> assert (List.length(fns) == 1) end
       end
     end
 
     test "doc attached across blank line" do
       match parse_src("orphan", "mod Or do\ndoc \"Orphaned\"\n\nfn f() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _) -> assert (d == Some("Orphaned")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("Orphaned")) end
           end
         end
       end
@@ -866,11 +866,11 @@ describe "Parser" do
     test "pfn not toplevel excluded even with include" do
       match parse_src("pntl", "mod PNTL do\nfn outer() do\n  pfn nested() do 1 end\n  nested()\nend\nend", true) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           assert (List.length(fns) == 1)
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(name, _, _, _) -> assert (name == "outer") end
+            Some(e) -> match e do FnEntry(name, _, _, _, _) -> assert (name == "outer") end
           end
         end
       end
@@ -879,7 +879,7 @@ describe "Parser" do
     test "tab indented nested fn excluded" do
       match parse_src("tab", "mod Tab do\nfn outer() do\n\tfn inner() do 1 end\n\tinner()\nend\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) -> assert (List.length(fns) == 1) end
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) -> assert (List.length(fns) == 1) end
       end
     end
 
@@ -893,7 +893,7 @@ describe "Parser" do
         None -> assert false
         Some(info) ->
           assert (Parser.info_name(info) == "Comp")
-          match info do ModuleInfo(name, comment, fns, types, ifaces) ->
+          match info do ModuleInfo(name, comment, fns, types, ifaces, _) ->
             assert (name == "Comp")
             match comment do None -> assert false | Some(c) -> assert (String.contains(c, "full module")) end
             assert (List.length(fns) == 2)
@@ -902,7 +902,7 @@ describe "Parser" do
             -- Check first fn
             match List.head_opt(fns) do
               None -> assert false
-              Some(e) -> match e do FnEntry(n, s, d, p) ->
+              Some(e) -> match e do FnEntry(n, s, d, p, _) ->
                 assert (n == "func")
                 assert (String.contains(s, "Int"))
                 assert (d == Some("Function doc"))
@@ -912,7 +912,7 @@ describe "Parser" do
             -- Check types
             match List.head_opt(types) do
               None -> assert false
-              Some(te) -> match te do TypeEntry(n, s, d) ->
+              Some(te) -> match te do TypeEntry(n, s, d, _) ->
                 assert (n == "Color")
                 assert (d == Some("Type doc"))
                 assert (String.contains(s, "Red"))
@@ -921,7 +921,7 @@ describe "Parser" do
             -- Check ifaces
             match List.head_opt(ifaces) do
               None -> assert false
-              Some(ie) -> match ie do IfaceEntry(n, _, d, _) ->
+              Some(ie) -> match ie do IfaceEntry(n, _, d, _, _) ->
                 assert (n == "Show")
                 assert (d == Some("Interface doc"))
               end
@@ -933,11 +933,11 @@ describe "Parser" do
     test "multiple functions in order" do
       match parse_src("multi", "mod Mu do\nfn a() do 1 end\nfn b() do 2 end\nfn c() do 3 end\nfn d() do 4 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           assert (List.length(fns) == 4)
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(name, _, _, _) -> assert (name == "a") end
+            Some(e) -> match e do FnEntry(name, _, _, _, _) -> assert (name == "a") end
           end
         end
       end
@@ -946,14 +946,14 @@ describe "Parser" do
     test "multiple types" do
       match parse_src("mt", "mod MT do\ntype A = X\ntype B = Y\ntype C = Z\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, types, _) -> assert (List.length(types) == 3) end
+        Some(info) -> match info do ModuleInfo(_, _, _, types, _, _) -> assert (List.length(types) == 3) end
       end
     end
 
     test "types and functions together" do
       match parse_src("both", "mod Bo do\ntype T = A | B\nfn f() do 1 end\ntype U = C\nfn g() do 2 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, types, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, types, _, _) ->
           assert (List.length(fns) == 2)
           assert (List.length(types) == 2)
         end
@@ -963,14 +963,14 @@ describe "Parser" do
     test "multiple pfn excluded" do
       match parse_src("pe", "mod PE do\npfn h1() do 1 end\nfn vis() do 2 end\npfn h2() do 3 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) -> assert (List.length(fns) == 1) end
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) -> assert (List.length(fns) == 1) end
       end
     end
 
     test "multiple pfn included" do
       match parse_src("pi", "mod PI do\npfn h1() do 1 end\nfn vis() do 2 end\npfn h2() do 3 end\nend", true) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           assert (List.length(fns) == 3)
         end
       end
@@ -980,7 +980,7 @@ describe "Parser" do
       let src = "mod IP do\n\ndoc \"Pub 1\"\nfn pub1() do 1 end\n\ndoc \"Priv 1\"\npfn priv1() do 2 end\n\ndoc \"Pub 2\"\nfn pub2() do 3 end\n\nend"
       match parse_src("ip", src, true) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           assert (List.length(fns) == 3)
         end
       end
@@ -989,10 +989,10 @@ describe "Parser" do
     test "doc on type" do
       match parse_src("doctype", "mod DT2 do\ndoc \"A color\"\ntype Color = Red | Green\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, types, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, _, types, _, _) ->
           match List.head_opt(types) do
             None -> assert false
-            Some(te) -> match te do TypeEntry(_, _, d) -> assert (d == Some("A color")) end
+            Some(te) -> match te do TypeEntry(_, _, d, _) -> assert (d == Some("A color")) end
           end
         end
       end
@@ -1001,10 +1001,10 @@ describe "Parser" do
     test "doc on interface" do
       match parse_src("di", "mod DI do\ndoc \"Printable\"\ninterface Pr do\n  fn show(self) : String\nend\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, _, ifaces) ->
+        Some(info) -> match info do ModuleInfo(_, _, _, _, ifaces, _) ->
           match List.head_opt(ifaces) do
             None -> assert false
-            Some(ie) -> match ie do IfaceEntry(_, _, d, _) -> assert (d == Some("Printable")) end
+            Some(ie) -> match ie do IfaceEntry(_, _, d, _, _) -> assert (d == Some("Printable")) end
           end
         end
       end
@@ -1013,10 +1013,10 @@ describe "Parser" do
     test "doc on ptype" do
       match parse_src("dpt", "mod DPT do\ndoc \"Private type\"\nptype Internal = X | Y\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, types, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, _, types, _, _) ->
           match List.head_opt(types) do
             None -> assert false
-            Some(te) -> match te do TypeEntry(name, s, d) ->
+            Some(te) -> match te do TypeEntry(name, s, d, _) ->
               assert (name == "Internal")
               assert (d == Some("Private type"))
               assert (String.contains(s, "ptype"))
@@ -1029,10 +1029,10 @@ describe "Parser" do
     test "multiple doc strings last applies" do
       match parse_src("md", "mod MD do\ndoc \"first\"\ndoc \"second\"\nfn f() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _) -> assert (d == Some("second")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("second")) end
           end
         end
       end
@@ -1041,10 +1041,10 @@ describe "Parser" do
     test "doc cleared after use" do
       match parse_src("dc", "mod DC do\ndoc \"documented\"\nfn first() do 1 end\nfn second() do 2 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           assert (List.length(fns) == 2)
           let f2 = List.nth(fns, 1)
-          match f2 do FnEntry(name, _, d, _) ->
+          match f2 do FnEntry(name, _, d, _, _) ->
             assert (name == "second")
             assert (d == None)
           end
@@ -1055,10 +1055,10 @@ describe "Parser" do
     test "comment-only lines preserve pending doc" do
       match parse_src("cp", "mod CP do\ndoc \"the doc\"\n-- comment line\nfn f() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _) -> assert (d == Some("the doc")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("the doc")) end
           end
         end
       end
@@ -1067,7 +1067,7 @@ describe "Parser" do
     test "comment with blank line" do
       match parse_src("bc", "-- First.\n\n-- After blank.\nmod BC do\nfn f() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, comment, _, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, comment, _, _, _, _) ->
           match comment do
             None -> assert false
             Some(c) -> assert (String.contains(c, "First"))
@@ -1086,24 +1086,24 @@ describe "Parser" do
     test "multiple interfaces" do
       match parse_src("mi", "mod MI do\ninterface A do\n  fn a(self) : Int\nend\ninterface B do\n  fn b(self) : Int\nend\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, _, ifaces) -> assert (List.length(ifaces) == 2) end
+        Some(info) -> match info do ModuleInfo(_, _, _, _, ifaces, _) -> assert (List.length(ifaces) == 2) end
       end
     end
 
     test "ptype and type together" do
       match parse_src("pt2", "mod PT2x do\ntype Pub = A\nptype Priv = B\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, types, _) -> assert (List.length(types) == 2) end
+        Some(info) -> match info do ModuleInfo(_, _, _, types, _, _) -> assert (List.length(types) == 2) end
       end
     end
 
     test "triple doc on type" do
       match parse_src("tdt", "mod TDT do\ndoc \"\"\"\nA complex type.\nWith details.\n\"\"\"\ntype Shape = Circle | Square\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, types, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, _, types, _, _) ->
           match List.head_opt(types) do
             None -> assert false
-            Some(te) -> match te do TypeEntry(name, _, d) ->
+            Some(te) -> match te do TypeEntry(name, _, d, _) ->
               assert (name == "Shape")
               match d do
                 None -> assert false
@@ -1120,7 +1120,7 @@ describe "Parser" do
     test "module comment ends at code" do
       match parse_src("mce", "-- Comment line 1.\n-- Comment line 2.\nmod MCE do\nfn f() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, comment, _, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, comment, _, _, _, _) ->
           match comment do
             None -> assert false
             Some(c) ->
@@ -1134,10 +1134,10 @@ describe "Parser" do
     test "doc string with special chars" do
       match parse_src("dsc", "mod DSC do\ndoc \"Returns a & b\"\nfn f() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _) -> assert (d == Some("Returns a & b")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("Returns a & b")) end
           end
         end
       end
@@ -1146,10 +1146,10 @@ describe "Parser" do
     test "doc with empty string" do
       match parse_src("des", "mod DES do\ndoc \"\"\nfn f() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _) -> assert (d == Some("")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("")) end
           end
         end
       end
@@ -1158,10 +1158,10 @@ describe "Parser" do
     test "triple doc empty content" do
       match parse_src("tde", "mod TDE do\ndoc \"\"\"\n\"\"\"\nfn f() do 1 end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _) -> assert (d == Some("")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("")) end
           end
         end
       end
@@ -1170,10 +1170,10 @@ describe "Parser" do
     test "triple doc on interface" do
       match parse_src("tdi", "mod TDI do\ndoc \"\"\"\nShows things.\n\"\"\"\ninterface Showable do\n  fn show(self) : String\nend\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, _, _, ifaces) ->
+        Some(info) -> match info do ModuleInfo(_, _, _, _, ifaces, _) ->
           match List.head_opt(ifaces) do
             None -> assert false
-            Some(ie) -> match ie do IfaceEntry(name, _, d, _) ->
+            Some(ie) -> match ie do IfaceEntry(name, _, d, _, _) ->
               assert (name == "Showable")
               match d do
                 None -> assert false
@@ -1188,10 +1188,10 @@ describe "Parser" do
     test "private function signature preserved" do
       match parse_src("pfs", "mod PFS do\npfn helper(x : Int, y : Int) : Int do x + y end\nend", true) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(name, s, _, priv) ->
+            Some(e) -> match e do FnEntry(name, s, _, priv, _) ->
               assert (name == "helper")
               assert (priv == true)
               assert (String.contains(s, "Int"))
@@ -1205,10 +1205,10 @@ describe "Parser" do
     test "complex function params" do
       match parse_src("fcp", "mod FCP do\nfn apply(f : fn(Int) : Int, x : Int) : Int do f(x) end\nend", false) do
         None -> assert false
-        Some(info) -> match info do ModuleInfo(_, _, fns, _, _) ->
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(name, s, _, _) ->
+            Some(e) -> match e do FnEntry(name, s, _, _, _) ->
               assert (name == "apply")
               assert (String.contains(s, "fn"))
               assert (String.contains(s, "Int"))

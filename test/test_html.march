@@ -68,8 +68,8 @@ describe "Html" do
 
     test "contains search filter logic" do
       let js = Html.page_js()
-      assert (String.contains(js, "input"))
-      assert (String.contains(js, "toLowerCase"))
+      assert (String.contains(js, "openSearch"))
+      assert (String.contains(js, "closeSearch"))
     end
 
     test "contains active link highlighting" do
@@ -128,7 +128,7 @@ describe "Html" do
 
     test "includes search input" do
       let html = Html.page("Test", "", false, "")
-      assert (String.contains(html, "id=\"sq\""))
+      assert (String.contains(html, "id=\"search-input\""))
       assert (String.contains(html, "search"))
     end
 
@@ -201,7 +201,7 @@ describe "Html" do
 
     test "contains search input styles" do
       let css = Html.page_css()
-      assert (String.contains(css, "#sq"))
+      assert (String.contains(css, "#search-input"))
     end
 
     test "contains name and sig styles" do
@@ -240,7 +240,7 @@ describe "Html" do
     test "contains search input handler" do
       let js = Html.page_js()
       assert (String.contains(js, "getElementById"))
-      assert (String.contains(js, "'sq'"))
+      assert (String.contains(js, "'search-overlay'"))
     end
 
     test "contains item toggle handler" do
@@ -249,9 +249,9 @@ describe "Html" do
       assert (String.contains(js, "'.ih'"))
     end
 
-    test "contains module card filtering" do
+    test "contains theme toggle" do
       let js = Html.page_js()
-      assert (String.contains(js, "'.mc'"))
+      assert (String.contains(js, "toggleTheme"))
     end
 
     test "contains copy to clipboard functionality" do
@@ -275,7 +275,7 @@ describe "Html" do
 
     test "page with all params populated" do
       let html = Html.page("Title", "<a>Sidebar</a>", true, "<p>Content</p>")
-      assert (String.contains(html, "<html lang=\"en\">"))
+      assert (String.contains(html, "<html lang=\"en\""))
       assert (String.contains(html, "charset"))
       assert (String.contains(html, "viewport"))
       assert (String.contains(html, "Title"))
@@ -352,8 +352,8 @@ describe "Html" do
       assert (String.contains(js, "forEach"))
       assert (String.contains(js, "addEventListener"))
       assert (String.contains(js, "click"))
-      assert (String.contains(js, "style.display"))
-      assert (String.contains(js, "includes"))
+      assert (String.contains(js, "classList"))
+      assert (String.contains(js, "toggle"))
     end
 
     test "js wraps pre elements with div" do
