@@ -1,4 +1,4 @@
--- ExDoc.Html — render parsed modules into HTML pages.
+-- Html — render parsed modules into HTML pages.
 
 mod Html do
 

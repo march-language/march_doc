@@ -1,4 +1,4 @@
--- ExDoc.Parser — extract doc entries from March source files.
+-- Parser — extract doc entries from March source files.
 
 mod Parser do
 

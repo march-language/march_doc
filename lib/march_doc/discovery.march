@@ -1,4 +1,4 @@
--- ExDoc.Discovery — find .march source files in directories.
+-- Discovery — find .march source files in directories.
 
 mod Discovery do
 

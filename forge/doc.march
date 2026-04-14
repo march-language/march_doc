@@ -5,10 +5,34 @@
 --
 -- Usage:
 --   forge march_doc.doc              generate docs to docs/{package_name}/
+--   forge doc --stdlib -o docs/stdlib   generate stdlib docs only
 
 mod MarchDocTask do
 
 -- ── Arg parsing ──────────────────────────────────────────────────────────────
+
+-- Parse FORGE_TASK_ARGS (newline-separated) into a list of strings.
+pfn parse_task_args() do
+  let s = Env.get("FORGE_TASK_ARGS", "")
+  List.filter(String.split(s, "\n"), fn a -> !String.is_empty(a))
+end
+
+-- Extract value after a flag like "-o" or "--output".
+pfn flag_value(args, flag) do
+  fn go(ls) do
+    match ls do
+      Nil -> None
+      Cons(a, Cons(v, _)) ->
+        if a == flag do Some(v) else go(Cons(v, [])) end
+      Cons(_, rest) -> go(rest)
+    end
+  end
+  go(args)
+end
+
+pfn has_flag(args, flag) do
+  List.any(args, fn a -> a == flag)
+end
 
 -- ── Project discovery ────────────────────────────────────────────────────────
 
@@ -62,19 +86,39 @@ end
 -- ── Main ─────────────────────────────────────────────────────────────────────
 
 fn main() do
-  match find_project_root() do
-    None ->
-      IO.warn("march_doc: no forge.toml found (run from a March project)")
+  let args = parse_task_args()
+  let stdlib_only = has_flag(args, "--stdlib")
+  if stdlib_only do
+    let output_dir = match flag_value(args, "-o") do
+      Some(d) -> d
+      None -> "docs/stdlib"
+    end
+    let stdlib_dir = Env.get("MARCH_STDLIB", "")
+    if String.is_empty(stdlib_dir) do
+      IO.warn("march_doc: MARCH_STDLIB not set; cannot generate stdlib docs")
       System.exit(1)
-    Some(root) ->
-      let name = read_package_name(root)
-      let lib = root ++ "/lib"
-      if Dir.exists(lib) do
-        MarchDoc.generate([lib], "docs/" ++ name, false, None)
-      else
-        IO.warn("march_doc: no lib/ directory found")
+    else
+      MarchDoc.generate([stdlib_dir], output_dir, false, None)
+    end
+  else
+    match find_project_root() do
+      None ->
+        IO.warn("march_doc: no forge.toml found (run from a March project)")
         System.exit(1)
-      end
+      Some(root) ->
+        let name = read_package_name(root)
+        let output_dir = match flag_value(args, "-o") do
+          Some(d) -> d
+          None -> "docs/" ++ name
+        end
+        let lib = root ++ "/lib"
+        if Dir.exists(lib) do
+          MarchDoc.generate([lib], output_dir, false, None)
+        else
+          IO.warn("march_doc: no lib/ directory found")
+          System.exit(1)
+        end
+    end
   end
 end
 

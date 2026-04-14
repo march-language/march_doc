@@ -1,4 +1,4 @@
--- ExDoc.Markdown — convert doc-string markdown to HTML.
+-- Markdown — convert doc-string markdown to HTML.
 
 mod Markdown do
 
