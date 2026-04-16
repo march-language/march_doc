@@ -93,24 +93,6 @@ pfn str_lt(a, b) do
   end end end
 end
 
--- Insert a string into a sorted list (insertion sort helper).
-pfn insert_sorted(name, sorted) do
-  match sorted do
-  Nil -> Cons(name, Nil)
-  Cons(head, tail) ->
-    if str_lt(name, head) do Cons(name, sorted)
-    else Cons(head, insert_sorted(name, tail)) end
-  end
-end
-
--- Sort a list of strings using insertion sort (avoids lambda-based sort).
-pfn sort_strings(files) do
-  match files do
-  Nil -> Nil
-  Cons(head, tail) -> insert_sorted(head, sort_strings(tail))
-  end
-end
-
 -- Discover .md files in a guides/ directory.
 fn discover(guides_dir : String) : List(String) do
   if Dir.exists(guides_dir) do
@@ -118,7 +100,10 @@ fn discover(guides_dir : String) : List(String) do
       Err(_) -> Nil
       Ok(list) -> list
     end
-    sort_strings(List.filter(entries, fn name -> String.ends_with(name, ".md")))
+    List.sort_by(
+      List.filter(entries, fn name -> String.ends_with(name, ".md")),
+      fn (a, b) -> str_lt(a, b)
+    )
   else Nil end
 end
 
