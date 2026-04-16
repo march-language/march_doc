@@ -1,0 +1,224 @@
+-- Tests for the TypeRegistry module.
+
+mod TestTypeRegistry do
+
+describe "TypeRegistry" do
+
+  describe "is_type_token" do
+
+    test "multi-char uppercase word is a type token" do
+      assert (TypeRegistry.is_type_token("String") == true)
+    end
+
+    test "Int is a type token" do
+      assert (TypeRegistry.is_type_token("Int") == true)
+    end
+
+    test "Option is a type token" do
+      assert (TypeRegistry.is_type_token("Option") == true)
+    end
+
+    test "List is a type token" do
+      assert (TypeRegistry.is_type_token("List") == true)
+    end
+
+    test "single uppercase char is not a type token" do
+      assert (TypeRegistry.is_type_token("A") == false)
+    end
+
+    test "lowercase word is not a type token" do
+      assert (TypeRegistry.is_type_token("foo") == false)
+    end
+
+    test "empty string is not a type token" do
+      assert (TypeRegistry.is_type_token("") == false)
+    end
+
+    test "single lowercase char is not a type token" do
+      assert (TypeRegistry.is_type_token("x") == false)
+    end
+
+    test "mixed case starting lowercase is not a type token" do
+      assert (TypeRegistry.is_type_token("camelCase") == false)
+    end
+
+  end
+
+  describe "find_ref" do
+
+    test "empty registry returns None" do
+      let r = TypeRegistry.find_ref("Foo", Nil)
+      assert (r == None)
+    end
+
+    test "finds existing type by name" do
+      let reg = Cons(TypeRef("Foo", "MyMod", "type-Foo"), Nil)
+      let r = TypeRegistry.find_ref("Foo", reg)
+      assert (r != None)
+    end
+
+    test "returns None when name not present" do
+      let reg = Cons(TypeRef("Foo", "MyMod", "type-Foo"), Nil)
+      let r = TypeRegistry.find_ref("Bar", reg)
+      assert (r == None)
+    end
+
+    test "finds correct ref in multi-item registry" do
+      let reg = Cons(TypeRef("A", "M1", "type-A"), Cons(TypeRef("B", "M2", "type-B"), Nil))
+      let ra = TypeRegistry.find_ref("A", reg)
+      let rb = TypeRegistry.find_ref("B", reg)
+      let rc = TypeRegistry.find_ref("C", reg)
+      assert (ra != None)
+      assert (rb != None)
+      assert (rc == None)
+    end
+
+    test "found ref has correct module and anchor" do
+      let reg = Cons(TypeRef("Color", "MyMod", "type-Color"), Nil)
+      match TypeRegistry.find_ref("Color", reg) do
+        None -> assert false
+        Some(ref) ->
+          match ref do
+            TypeRef(name, mod_name, anchor) ->
+              assert (name == "Color")
+              assert (mod_name == "MyMod")
+              assert (anchor == "type-Color")
+          end
+      end
+    end
+
+  end
+
+  describe "build_registry" do
+
+    test "empty module list produces empty registry" do
+      let r = TypeRegistry.build_registry(Nil)
+      assert (List.is_empty(r))
+    end
+
+    test "module with one type produces one TypeRef" do
+      let info = ModuleInfo("MyMod", None, Nil,
+        Cons(TypeEntry("Color", "Color = Red | Blue", None, 0), Nil),
+        Nil, "")
+      let r = TypeRegistry.build_registry(Cons(info, Nil))
+      assert (List.length(r) >= 1)
+    end
+
+    test "type TypeRef has correct anchor format" do
+      let info = ModuleInfo("MyMod", None, Nil,
+        Cons(TypeEntry("Foo", "Foo = A | B", None, 0), Nil),
+        Nil, "")
+      let r = TypeRegistry.build_registry(Cons(info, Nil))
+      match TypeRegistry.find_ref("Foo", r) do
+        None -> assert false
+        Some(ref) ->
+          match ref do
+            TypeRef(_, mod_name, anchor) ->
+              assert (mod_name == "MyMod")
+              assert (anchor == "type-Foo")
+          end
+      end
+    end
+
+    test "interface TypeRef has correct anchor format" do
+      let info = ModuleInfo("MyMod", None, Nil, Nil,
+        Cons(IfaceEntry("Show", "Show", None, Nil, 0), Nil),
+        "")
+      let r = TypeRegistry.build_registry(Cons(info, Nil))
+      match TypeRegistry.find_ref("Show", r) do
+        None -> assert false
+        Some(ref) ->
+          match ref do
+            TypeRef(_, _, anchor) ->
+              assert (anchor == "iface-Show")
+          end
+      end
+    end
+
+    test "module with both types and interfaces includes all" do
+      let info = ModuleInfo("MyMod", None, Nil,
+        Cons(TypeEntry("Color", "Color = Red | Blue", None, 0), Nil),
+        Cons(IfaceEntry("Show", "Show", None, Nil, 0), Nil),
+        "")
+      let r = TypeRegistry.build_registry(Cons(info, Nil))
+      let color_ref = TypeRegistry.find_ref("Color", r)
+      let show_ref = TypeRegistry.find_ref("Show", r)
+      assert (color_ref != None)
+      assert (show_ref != None)
+    end
+
+    test "multiple modules all contribute to registry" do
+      let m1 = ModuleInfo("Mod1", None, Nil,
+        Cons(TypeEntry("Alpha", "Alpha = A", None, 0), Nil),
+        Nil, "")
+      let m2 = ModuleInfo("Mod2", None, Nil,
+        Cons(TypeEntry("Beta", "Beta = B", None, 0), Nil),
+        Nil, "")
+      let r = TypeRegistry.build_registry(Cons(m1, Cons(m2, Nil)))
+      let alpha = TypeRegistry.find_ref("Alpha", r)
+      let beta = TypeRegistry.find_ref("Beta", r)
+      assert (alpha != None)
+      assert (beta != None)
+    end
+
+    test "module with no types or interfaces yields empty entries" do
+      let info = ModuleInfo("NoTypes", None,
+        Cons(FnEntry("f", "f()", None, false, 0), Nil),
+        Nil, Nil, "")
+      let r = TypeRegistry.build_registry(Cons(info, Nil))
+      let found = TypeRegistry.find_ref("f", r)
+      assert (found == None)
+    end
+
+  end
+
+  describe "linkify_signature" do
+
+    test "plain text with no types passes through" do
+      let result = TypeRegistry.linkify_signature("x", Nil, "MyMod")
+      assert (result == "x")
+    end
+
+    test "unknown type is not linked" do
+      let result = TypeRegistry.linkify_signature("foo : Bar", Nil, "MyMod")
+      assert (String.contains(result, "Bar"))
+      assert (!String.contains(result, "<a "))
+    end
+
+    test "known type in same module links to anchor" do
+      let reg = Cons(TypeRef("Color", "MyMod", "type-Color"), Nil)
+      let result = TypeRegistry.linkify_signature("Color", reg, "MyMod")
+      assert (String.contains(result, "href=\"#type-Color\""))
+      assert (String.contains(result, ">Color</a>"))
+    end
+
+    test "known type in other module links to other module html" do
+      let reg = Cons(TypeRef("Color", "OtherMod", "type-Color"), Nil)
+      let result = TypeRegistry.linkify_signature("Color", reg, "MyMod")
+      assert (String.contains(result, "OtherMod.html#type-Color"))
+    end
+
+    test "special HTML chars in non-type tokens are escaped" do
+      let result = TypeRegistry.linkify_signature("a & b", Nil, "MyMod")
+      assert (String.contains(result, "&amp;"))
+    end
+
+    test "multiple types in signature all linked" do
+      let reg = Cons(TypeRef("Foo", "M", "type-Foo"),
+               Cons(TypeRef("Bar", "M", "type-Bar"), Nil))
+      let result = TypeRegistry.linkify_signature("Foo, Bar", reg, "M")
+      assert (String.contains(result, "#type-Foo"))
+      assert (String.contains(result, "#type-Bar"))
+    end
+
+    test "interface type also linked" do
+      let reg = Cons(TypeRef("Show", "MyMod", "iface-Show"), Nil)
+      let result = TypeRegistry.linkify_signature("Show", reg, "MyMod")
+      assert (String.contains(result, "href=\"#iface-Show\""))
+    end
+
+  end
+
+end
+
+end

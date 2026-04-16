@@ -1,0 +1,115 @@
+-- Tests for the SearchIndex module.
+
+mod TestSearchIndex do
+
+describe "SearchIndex" do
+
+  describe "build" do
+
+    test "empty module list produces empty JSON array" do
+      let json = SearchIndex.build(Nil)
+      assert (json == "[]")
+    end
+
+    test "output is a JSON array" do
+      let info = ModuleInfo("Mod", None, Nil, Nil, Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.starts_with(json, "["))
+      assert (String.ends_with(json, "]"))
+    end
+
+    test "module entry appears with kind module" do
+      let info = ModuleInfo("MyMod", None, Nil, Nil, Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "MyMod"))
+      assert (String.contains(json, "module"))
+    end
+
+    test "module comment first line appears as doc" do
+      let info = ModuleInfo("MyMod", Some("First line.\nSecond line."), Nil, Nil, Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "First line."))
+      assert (!String.contains(json, "Second line."))
+    end
+
+    test "public function appears with kind fn" do
+      let fn_entry = FnEntry("myFn", "myFn(x : Int) : String", Some("Does stuff"), false, 0)
+      let info = ModuleInfo("MyMod", None, Cons(fn_entry, Nil), Nil, Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "myFn"))
+      assert (String.contains(json, "\"k\":\"fn\""))
+    end
+
+    test "private function appears with kind pfn" do
+      let fn_entry = FnEntry("secret", "secret()", None, true, 0)
+      let info = ModuleInfo("MyMod", None, Cons(fn_entry, Nil), Nil, Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "secret"))
+      assert (String.contains(json, "\"k\":\"pfn\""))
+    end
+
+    test "function doc first line only appears" do
+      let fn_entry = FnEntry("f", "f()", Some("Line one.\nLine two."), false, 0)
+      let info = ModuleInfo("MyMod", None, Cons(fn_entry, Nil), Nil, Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "Line one."))
+      assert (!String.contains(json, "Line two."))
+    end
+
+    test "type appears with kind type" do
+      let t = TypeEntry("Color", "Color = Red | Blue", Some("A color"), 0)
+      let info = ModuleInfo("MyMod", None, Nil, Cons(t, Nil), Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "Color"))
+      assert (String.contains(json, "\"k\":\"type\""))
+    end
+
+    test "ptype appears with kind ptype" do
+      let t = TypeEntry("Internal", "ptype Internal = X | Y", None, 0)
+      let info = ModuleInfo("MyMod", None, Nil, Cons(t, Nil), Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "Internal"))
+      assert (String.contains(json, "\"k\":\"ptype\""))
+    end
+
+    test "interface appears with kind interface" do
+      let i = IfaceEntry("Show", "Show", Some("Show iface"), Nil, 0)
+      let info = ModuleInfo("MyMod", None, Nil, Nil, Cons(i, Nil), "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "Show"))
+      assert (String.contains(json, "interface"))
+    end
+
+    test "module name field present" do
+      let info = ModuleInfo("Alpha", None, Nil, Nil, Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "\"m\":\"Alpha\""))
+    end
+
+    test "function signature included" do
+      let fn_entry = FnEntry("add", "add(a : Int, b : Int) : Int", None, false, 0)
+      let info = ModuleInfo("Math", None, Cons(fn_entry, Nil), Nil, Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "add(a : Int, b : Int) : Int"))
+    end
+
+    test "multiple modules all appear" do
+      let a = ModuleInfo("Alpha", None, Nil, Nil, Nil, "")
+      let b = ModuleInfo("Beta", None, Nil, Nil, Nil, "")
+      let json = SearchIndex.build(Cons(a, Cons(b, Nil)))
+      assert (String.contains(json, "Alpha"))
+      assert (String.contains(json, "Beta"))
+    end
+
+    test "function with no doc has empty doc field" do
+      let fn_entry = FnEntry("f", "f()", None, false, 0)
+      let info = ModuleInfo("Mod", None, Cons(fn_entry, Nil), Nil, Nil, "")
+      let json = SearchIndex.build(Cons(info, Nil))
+      assert (String.contains(json, "\"d\":\"\""))
+    end
+
+  end
+
+end
+
+end

@@ -2,17 +2,17 @@
 
 mod TestDiscovery do
 
-pfn mkdirs() do
+fn mkdirs() do
   let dirs = Cons("/tmp/march_doc_disco_flat", Cons("/tmp/march_doc_disco_nested/sub", Cons("/tmp/march_doc_disco_deep/a/b/c", Cons("/tmp/march_doc_disco_multi/src", Cons("/tmp/march_doc_disco_multi/lib", Cons("/tmp/march_doc_disco_3lev/a/b", Cons("/tmp/march_doc_disco_emptydir", Nil)))))))
   List.each(dirs, fn d -> match Dir.mkdir_p(d) do Ok(_) -> () | Err(_) -> () end)
 end
 
-pfn mkfiles() do
+fn mkfiles() do
   let files = Cons(("/tmp/march_doc_disco_flat/a.march", "mod A do end"), Cons(("/tmp/march_doc_disco_flat/b.march", "mod B do end"), Cons(("/tmp/march_doc_disco_flat/readme.txt", "not march"), Cons(("/tmp/march_doc_disco_flat/notes.md", "# notes"), Cons(("/tmp/march_doc_disco_flat/data.json", "{}"), Cons(("/tmp/march_doc_disco_nested/top.march", "mod Top do end"), Cons(("/tmp/march_doc_disco_nested/sub/nested.march", "mod Nested do end"), Cons(("/tmp/march_doc_disco_deep/a/b/c/deep.march", "mod Deep do end"), Cons(("/tmp/march_doc_disco_multi/src/app.march", "mod App do end"), Cons(("/tmp/march_doc_disco_multi/lib/util.march", "mod Util do end"), Cons(("/tmp/march_doc_disco_multi/lib/helper.march", "mod Helper do end"), Cons(("/tmp/march_doc_disco_3lev/e.march", "mod E do end"), Cons(("/tmp/march_doc_disco_3lev/a/d.march", "mod D do end"), Cons(("/tmp/march_doc_disco_3lev/a/b/c.march", "mod C do end"), Nil))))))))))))))
   List.each(files, fn pair -> match pair do (path, content) -> match File.write(path, content) do Ok(_) -> () | Err(_) -> () end end)
 end
 
-pfn has_file(files, name) do
+fn has_file(files, name) do
   List.any(files, fn f -> String.ends_with(f, name))
 end
 

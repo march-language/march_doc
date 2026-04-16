@@ -4,7 +4,7 @@
 mod Scroll do
 
 -- Extract code examples from a doc string (fenced ```march blocks).
-pfn extract_code_blocks(doc_opt) do
+fn extract_code_blocks(doc_opt) do
   match doc_opt do
   None -> Nil
   Some(doc_text) ->
@@ -33,9 +33,9 @@ pfn extract_code_blocks(doc_opt) do
 end
 
 -- Render a single FnEntry as a scroll section.
-pfn render_fn_section(entry) do
+fn render_fn_section(entry) do
   match entry do
-  Parser.FnEntry(name, dsig, doc_opt, _, _) ->
+  FnEntry(name, dsig, doc_opt, _, _) ->
     let blocks = extract_code_blocks(doc_opt)
     if List.is_empty(blocks) do ""
     else
@@ -67,13 +67,14 @@ pfn render_fn_section(entry) do
       ), "\n\n")
       header ++ prose ++ code ++ "\n\n"
     end
+  _ -> ""
   end
 end
 
 -- Render a single TypeEntry as a scroll section.
-pfn render_type_section(entry) do
+fn render_type_section(entry) do
   match entry do
-  Parser.TypeEntry(name, dsig, doc_opt, _) ->
+  TypeEntry(name, dsig, doc_opt, _) ->
     let blocks = extract_code_blocks(doc_opt)
     if List.is_empty(blocks) do ""
     else
@@ -83,13 +84,14 @@ pfn render_type_section(entry) do
       ), "\n\n")
       header ++ code ++ "\n\n"
     end
+  _ -> ""
   end
 end
 
 -- Generate a .scroll.md file for a module.
-fn render_module(info : Parser.ModuleInfo) : Option((String, String)) do
+fn render_module(info : ModuleInfo) : Option((String, String)) do
   match info do
-  Parser.ModuleInfo(mod_name, comment_opt, fns, types, _, _) ->
+  ModuleInfo(mod_name, comment_opt, fns, types, _, _) ->
     -- Collect type sections (with examples) first, then fn sections
     let type_sections = List.filter(
       List.map(types, render_type_section),
@@ -111,6 +113,7 @@ fn render_module(info : Parser.ModuleInfo) : Option((String, String)) do
         String.join(fn_sections, "")
       Some((mod_name ++ ".scroll.md", body))
     end
+  _ -> None
   end
 end
 

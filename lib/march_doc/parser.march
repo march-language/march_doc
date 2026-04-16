@@ -59,16 +59,16 @@ fn is_prv(e : FnEntry) : Bool do entry_priv(e) end
 
 -- ── Internal helpers ─────────────────────────────────────────────────────────
 
-pfn drop_prefix(s, prefix) do
+fn drop_prefix(s, prefix) do
   String.slice(s, String.byte_size(prefix), String.byte_size(s) - String.byte_size(prefix))
 end
 
-pfn drop_suffix(s, suffix) do
+fn drop_suffix(s, suffix) do
   String.slice(s, 0, String.byte_size(s) - String.byte_size(suffix))
 end
 
 -- Extract the module name from "mod Name do" (first occurrence).
-pfn parse_module_name(lines) do
+fn parse_module_name(lines) do
   fn go(ls) do
     match ls do
     Nil -> "Unknown"
@@ -85,7 +85,7 @@ pfn parse_module_name(lines) do
 end
 
 -- Collect leading "--" comment block before any non-comment code.
-pfn parse_module_comment(lines) do
+fn parse_module_comment(lines) do
   fn go(ls, acc) do
     match ls do
     Nil ->
@@ -114,7 +114,7 @@ pfn parse_module_comment(lines) do
 end
 
 -- Extract the doc text from a single-line: doc "text"
-pfn extract_single_doc(line) do
+fn extract_single_doc(line) do
   let t = String.trim(line)
   match String.split_first(t, "\"") do
   None -> ""
@@ -127,7 +127,7 @@ pfn extract_single_doc(line) do
 end
 
 -- Collect triple-quoted doc lines until closing """
-pfn collect_triple_doc(lines) do
+fn collect_triple_doc(lines) do
   fn go(ls, acc) do
     match ls do
     Nil -> (String.trim(String.join(List.reverse(acc), "\n")), Nil)
@@ -146,7 +146,7 @@ pfn collect_triple_doc(lines) do
 end
 
 -- Strip a known keyword prefix from a declaration line.
-pfn strip_kw(t) do
+fn strip_kw(t) do
   if String.starts_with(t, "pfn ") do drop_prefix(t, "pfn ")
   else
     if String.starts_with(t, "fn ") do drop_prefix(t, "fn ")
@@ -164,7 +164,7 @@ pfn strip_kw(t) do
 end
 
 -- Extract function/type signature: strip keyword prefix and trailing " do".
-pfn extract_sig(line) do
+fn extract_sig(line) do
   let t = String.trim(line)
   let t = strip_kw(t)
   let t = if String.ends_with(t, " do") do drop_suffix(t, " do") else t end
@@ -172,7 +172,7 @@ pfn extract_sig(line) do
 end
 
 -- Extract the name part from a declaration (up to first '(' ':' '=' or space).
-pfn decl_name(decl) do
+fn decl_name(decl) do
   fn go(i, n) do
     if i >= n do decl
     else
@@ -194,7 +194,7 @@ pfn decl_name(decl) do
 end
 
 -- Only declarations at column 0 are module-level (not nested helpers).
-pfn is_toplevel(line) do
+fn is_toplevel(line) do
   if String.is_empty(line) do false
   else
     let ch = String.slice(line, 0, 1)
@@ -202,7 +202,7 @@ pfn is_toplevel(line) do
   end
 end
 
-pfn process_line(line, pending, fns, types, ifaces, include_private, line_num) do
+fn process_line(line, pending, fns, types, ifaces, include_private, line_num) do
   let t = String.trim(line)
   if String.is_empty(t) do (pending, fns, types, ifaces, Nil)
   else
@@ -249,7 +249,7 @@ pfn process_line(line, pending, fns, types, ifaces, include_private, line_num) d
 end
 
 -- Walk lines extracting doc + fn/type/interface entries.
-pfn parse_entries(lines, include_private) do
+fn parse_entries(lines, include_private) do
   fn go(ls, pending, fns, types, ifaces, line_num) do
     match ls do
     Nil ->

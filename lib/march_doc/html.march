@@ -215,7 +215,7 @@ fn page_js() : String do
   "});"
 end
 
-pfn search_js() : String do
+fn search_js() : String do
   -- Cross-module search: loads search-index.json, fuzzy matches, renders results
   "var SI=null;" ++
   "fetch('search-index.json').then(function(r){return r.json();}).then(function(d){SI=d;}).catch(function(){});" ++
@@ -344,33 +344,36 @@ fn sidebar_links(module_names : List(String)) : String do
 end
 
 -- Hierarchical sidebar: each module is an expandable group with sub-items.
-fn sidebar_nav(modules : List(Parser.ModuleInfo)) : String do
+fn sidebar_nav(modules : List(ModuleInfo)) : String do
   let groups = List.map(modules, fn info ->
     match info do
-    Parser.ModuleInfo(mod_name, _, fns, types, ifaces, _) ->
+    ModuleInfo(mod_name, _, fns, types, ifaces, _) ->
       let esc_name = Markdown.html_escape(mod_name)
       let href = esc_name ++ ".html"
       -- Sub-items
       let type_items = List.map(types, fn e ->
         match e do
-        Parser.TypeEntry(name, _, _, _) ->
+        TypeEntry(name, _, _, _) ->
           "<a class=\"sl\" href=\"" ++ href ++ "#type-" ++ Markdown.html_escape(name) ++ "\">" ++
           "<span class=\"sb-kind\" style=\"color:var(--ty)\">T</span>" ++ Markdown.html_escape(name) ++ "</a>"
+        _ -> ""
         end
       )
       let iface_items = List.map(ifaces, fn e ->
         match e do
-        Parser.IfaceEntry(name, _, _, _, _) ->
+        IfaceEntry(name, _, _, _, _) ->
           "<a class=\"sl\" href=\"" ++ href ++ "#iface-" ++ Markdown.html_escape(name) ++ "\">" ++
           "<span class=\"sb-kind\" style=\"color:var(--if)\">I</span>" ++ Markdown.html_escape(name) ++ "</a>"
+        _ -> ""
         end
       )
       let pub_fns = List.filter(fns, Parser.is_pub)
       let fn_items = List.map(pub_fns, fn e ->
         match e do
-        Parser.FnEntry(name, _, _, _, _) ->
+        FnEntry(name, _, _, _, _) ->
           "<a class=\"sl\" href=\"" ++ href ++ "#fn-" ++ Markdown.html_escape(name) ++ "\">" ++
           "<span class=\"sb-kind\" style=\"color:var(--fn)\">F</span>" ++ Markdown.html_escape(name) ++ "</a>"
+        _ -> ""
         end
       )
       let all_sub = List.append(type_items, List.append(iface_items, fn_items))
@@ -381,6 +384,7 @@ fn sidebar_nav(modules : List(Parser.ModuleInfo)) : String do
       "<span class=\"sb-chevron\">&#9656;</span>" ++
       "<a class=\"sl\" href=\"" ++ href ++ "\">" ++ esc_name ++ "</a>" ++
       "</div>" ++ sub_html ++ "</div>"
+    _ -> ""
     end
   )
   String.join(groups, "\n")
@@ -388,7 +392,7 @@ end
 
 -- ── Item renderers ───────────────────────────────────────────────────────────
 
-pfn render_comment_html(comment_opt) do
+fn render_comment_html(comment_opt) do
   match comment_opt do
   None -> ""
   Some(c) -> "<div class=\"mdoc\">" ++ Markdown.md_to_html(c) ++ "</div>"
@@ -397,7 +401,7 @@ end
 
 -- Build a source link from a URL pattern, file path, and line number.
 -- Pattern uses {path} and {line} placeholders.
-pfn make_src_link(src_pattern, file_path, line_num) do
+fn make_src_link(src_pattern, file_path, line_num) do
   match src_pattern do
   None -> ""
   Some(pattern) ->
@@ -409,9 +413,9 @@ pfn make_src_link(src_pattern, file_path, line_num) do
   end
 end
 
-pfn render_fn(entry, registry, mod_name, src_pattern, file_path) do
+fn render_fn(entry, registry, mod_name, src_pattern, file_path) do
   match entry do
-  Parser.FnEntry(name, dsig, doc_opt, is_private, line_num) ->
+  FnEntry(name, dsig, doc_opt, is_private, line_num) ->
     let badge_cls = if is_private do "bpfn" else "bfn" end
     let badge_lbl = if is_private do "pfn" else "fn" end
     let anchor_id = "fn-" ++ Markdown.html_escape(name)
@@ -428,12 +432,13 @@ pfn render_fn(entry, registry, mod_name, src_pattern, file_path) do
     end
     let body = "<div class=\"ib\">" ++ doc_html ++ "</div>"
     "<div class=\"item\" id=\"" ++ anchor_id ++ "\">" ++ hdr ++ body ++ "</div>"
+  _ -> ""
   end
 end
 
-pfn render_type(entry, registry, mod_name, src_pattern, file_path) do
+fn render_type(entry, registry, mod_name, src_pattern, file_path) do
   match entry do
-  Parser.TypeEntry(name, dsig, doc_opt, line_num) ->
+  TypeEntry(name, dsig, doc_opt, line_num) ->
     let is_prv = String.starts_with(dsig, "ptype ")
     let badge_cls = if is_prv do "bpt" else "bty" end
     let badge_lbl = if is_prv do "ptype" else "type" end
@@ -452,12 +457,13 @@ pfn render_type(entry, registry, mod_name, src_pattern, file_path) do
     end
     let body = "<div class=\"ib\">" ++ doc_html ++ "</div>"
     "<div class=\"item\" id=\"" ++ anchor_id ++ "\">" ++ hdr ++ body ++ "</div>"
+  _ -> ""
   end
 end
 
-pfn render_iface(entry, registry, mod_name, src_pattern, file_path) do
+fn render_iface(entry, registry, mod_name, src_pattern, file_path) do
   match entry do
-  Parser.IfaceEntry(name, dsig, doc_opt, _methods, line_num) ->
+  IfaceEntry(name, dsig, doc_opt, _methods, line_num) ->
     let anchor_id = "iface-" ++ Markdown.html_escape(name)
     let badge = "<span class=\"badge bif\">interface</span>"
     let src = make_src_link(src_pattern, file_path, line_num)
@@ -472,14 +478,15 @@ pfn render_iface(entry, registry, mod_name, src_pattern, file_path) do
     end
     let body = "<div class=\"ib\">" ++ doc_html ++ "</div>"
     "<div class=\"item\" id=\"" ++ anchor_id ++ "\">" ++ hdr ++ body ++ "</div>"
+  _ -> ""
   end
 end
 
 -- ── Module page ──────────────────────────────────────────────────────────────
 
-fn render_module(info : Parser.ModuleInfo, sidebar : String, registry : List(TypeRegistry.TypeRef), src_pattern : Option(String)) : String do
+fn render_module(info : ModuleInfo, sidebar : String, registry : List(TypeRef), src_pattern : Option(String)) : String do
   match info do
-  Parser.ModuleInfo(mod_name, comment_opt, fns, types, ifaces, file_path) ->
+  ModuleInfo(mod_name, comment_opt, fns, types, ifaces, file_path) ->
     let breadcrumb = "<nav class=\"breadcrumb\"><a href=\"index.html\">March Docs</a><span class=\"sep\">&rsaquo;</span><span>" ++ Markdown.html_escape(mod_name) ++ "</span></nav>"
     let title_html = breadcrumb ++ "<h1>" ++ Markdown.html_escape(mod_name) ++ "</h1>"
     let comment_html = render_comment_html(comment_opt)
@@ -499,14 +506,15 @@ fn render_module(info : Parser.ModuleInfo, sidebar : String, registry : List(Typ
       else "<h2>Private</h2>" ++ String.join(List.map(prv_fns, fn e -> render_fn(e, registry, mod_name, src_pattern, file_path)), "\n") end
     let content = title_html ++ comment_html ++ types_html ++ ifaces_html ++ pub_html ++ prv_html
     page(mod_name, sidebar, false, content)
+  _ -> ""
   end
 end
 
 -- ── Index page ───────────────────────────────────────────────────────────────
 
-pfn index_card(info) do
+fn index_card(info) do
   match info do
-  Parser.ModuleInfo(name, comment_opt, fns, types, _, _) ->
+  ModuleInfo(name, comment_opt, fns, types, _, _) ->
     let blurb = match comment_opt do
       None -> ""
       Some(c) ->
@@ -522,10 +530,11 @@ pfn index_card(info) do
       " functions</span><span>" ++ String.from_int(ty_count) ++ " types</span></div>"
     "<a href=\"" ++ Markdown.html_escape(name) ++ ".html\" style=\"display:block;color:inherit;text-decoration:none\">" ++
     "<div class=\"mc\"><h3>" ++ Markdown.html_escape(name) ++ "</h3>" ++ blurb ++ stats ++ "</div></a>"
+  _ -> ""
   end
 end
 
-fn render_index(modules : List(Parser.ModuleInfo), sidebar : String) : String do
+fn render_index(modules : List(ModuleInfo), sidebar : String) : String do
   let cards = List.map(modules, index_card)
   let count = String.from_int(List.length(modules))
   let content = "<h1>API Reference</h1>" ++

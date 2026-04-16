@@ -6,38 +6,47 @@ mod TypeRegistry do
 type TypeRef = TypeRef(String, String, String)
 
 -- Build a registry of all type and interface names across modules.
-fn build_registry(modules : List(Parser.ModuleInfo)) : List(TypeRef) do
+fn build_registry(modules : List(ModuleInfo)) : List(TypeRef) do
   List.flat_map(modules, fn info ->
     match info do
-    Parser.ModuleInfo(mod_name, _, _, types, ifaces, _) ->
+    ModuleInfo(mod_name, _, _, types, ifaces, _) ->
       let type_refs = List.map(types, fn entry ->
         match entry do
-        Parser.TypeEntry(name, _, _, _) ->
+        TypeEntry(name, _, _, _) ->
           TypeRef(name, mod_name, "type-" ++ name)
+        _ -> TypeRef("", "", "")
         end
       )
       let iface_refs = List.map(ifaces, fn entry ->
         match entry do
-        Parser.IfaceEntry(name, _, _, _, _) ->
+        IfaceEntry(name, _, _, _, _) ->
           TypeRef(name, mod_name, "iface-" ++ name)
+        _ -> TypeRef("", "", "")
         end
       )
       List.append(type_refs, iface_refs)
+    _ -> Nil
     end
   )
 end
 
+-- Check if a character is an ASCII uppercase letter.
+pfn is_upper_char(ch) do
+  ch == "A" || ch == "B" || ch == "C" || ch == "D" || ch == "E" || ch == "F" ||
+  ch == "G" || ch == "H" || ch == "I" || ch == "J" || ch == "K" || ch == "L" ||
+  ch == "M" || ch == "N" || ch == "O" || ch == "P" || ch == "Q" || ch == "R" ||
+  ch == "S" || ch == "T" || ch == "U" || ch == "V" || ch == "W" || ch == "X" ||
+  ch == "Y" || ch == "Z"
+end
+
 -- Check if a token looks like a type name (starts with uppercase, length > 1).
-pfn is_type_token(tok) do
+fn is_type_token(tok) do
   if String.byte_size(tok) <= 1 do false
-  else
-    let ch = String.slice(tok, 0, 1)
-    ch >= "A" && ch <= "Z"
-  end
+  else is_upper_char(String.slice(tok, 0, 1)) end
 end
 
 -- Find a TypeRef by name in the registry.
-pfn find_ref(name, registry) do
+fn find_ref(name, registry) do
   match registry do
   Nil -> None
   Cons(ref, rest) ->
@@ -50,7 +59,7 @@ pfn find_ref(name, registry) do
 end
 
 -- Check if a character is a delimiter for tokenization.
-pfn is_delim(ch) do
+fn is_delim(ch) do
   if ch == "(" do true
   else if ch == ")" do true
   else if ch == "," do true
@@ -61,7 +70,7 @@ end
 
 -- Tokenize a signature string into words and delimiters.
 -- Returns a list of tokens (words and individual punctuation chars).
-pfn tokenize_sig(s) do
+fn tokenize_sig(s) do
   fn go(i, n, start, acc) do
     if i >= n do
       if i > start do List.reverse(Cons(String.slice(s, start, i - start), acc))

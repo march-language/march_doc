@@ -22,24 +22,8 @@ end
 
 -- ── Inline rendering ─────────────────────────────────────────────────────────
 
--- Render inline `code` spans.
-pfn render_code_spans(text) do
-  fn go(s, out) do
-    match String.split_first(s, "`") do
-    None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
-    Some((before, after)) ->
-      match String.split_first(after, "`") do
-      None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
-      Some((code, rest)) ->
-        go(rest, Cons("</code>", Cons(html_escape(code), Cons("<code>", Cons(html_escape(before), out)))))
-      end
-    end
-  end
-  go(text, Nil)
-end
-
 -- Render [text](url) links in a string (no code spans — call after splitting code).
-pfn render_links(text) do
+fn render_links(text) do
   fn go(s, out) do
     match String.split_first(s, "[") do
     None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
@@ -60,7 +44,7 @@ pfn render_links(text) do
 end
 
 -- Render **bold** in a string (operates on already-escaped/processed text).
-pfn render_bold(text) do
+fn render_bold(text) do
   fn go(s, out) do
     match String.split_first(s, "**") do
     None -> String.join(List.reverse(Cons(s, out)), "")
@@ -76,7 +60,7 @@ pfn render_bold(text) do
 end
 
 -- Render *italic* in a string (operates on already-processed text).
-pfn render_italic(text) do
+fn render_italic(text) do
   fn go(s, out) do
     match String.split_first(s, "*") do
     None -> String.join(List.reverse(Cons(s, out)), "")
@@ -118,7 +102,7 @@ end
 
 -- ── Block-level markdown ─────────────────────────────────────────────────────
 
-pfn flush_para(buf, out) do
+fn flush_para(buf, out) do
   if List.is_empty(buf) do out
   else
     let text = render_inline(String.join(List.reverse(buf), " "))
@@ -126,22 +110,22 @@ pfn flush_para(buf, out) do
   end
 end
 
-pfn flush_code(buf, out) do
+fn flush_code(buf, out) do
   let code = html_escape(String.join(List.reverse(buf), "\n"))
   Cons("</code></pre>", Cons(code, out))
 end
 
-pfn is_fence(t) do
+fn is_fence(t) do
   String.byte_size(t) >= 3 && String.slice(t, 0, 3) == "```"
 end
 
-pfn md_step_code(line, rest, buf, out, go) do
+fn md_step_code(line, rest, buf, out, go) do
   let t = String.trim(line)
   if t == "```" do go(rest, Nil, flush_code(buf, out), false)
   else go(rest, Cons(line, buf), out, true) end
 end
 
-pfn md_heading(t) do
+fn md_heading(t) do
   if String.starts_with(t, "### ") do Some(("<h4>", drop_prefix(t, "### ")))
   else
     if String.starts_with(t, "## ") do Some(("<h3>", drop_prefix(t, "## ")))
@@ -153,17 +137,17 @@ pfn md_heading(t) do
 end
 
 -- Check if a line is a blockquote admonition: > **Note:** or > **Warning:**
-pfn is_admonition(t) do
+fn is_admonition(t) do
   String.starts_with(t, "> ")
 end
 
 -- Detect unordered list item: starts with "- " or "* "
-pfn is_ul_item(t) do
+fn is_ul_item(t) do
   String.starts_with(t, "- ") || String.starts_with(t, "* ")
 end
 
 -- Detect ordered list item: starts with "N. "
-pfn is_ol_item(t) do
+fn is_ol_item(t) do
   if String.byte_size(t) >= 3 do
     let ch = String.slice(t, 0, 1)
     ch >= "0" && ch <= "9" && String.contains(t, ". ")
@@ -171,7 +155,7 @@ pfn is_ol_item(t) do
 end
 
 -- Extract list item text after the marker
-pfn list_item_text(t) do
+fn list_item_text(t) do
   if String.starts_with(t, "- ") do drop_prefix(t, "- ")
   else
     if String.starts_with(t, "* ") do drop_prefix(t, "* ")
@@ -186,7 +170,7 @@ pfn list_item_text(t) do
 end
 
 -- Collect consecutive list items and blockquote lines
-pfn collect_ul(lines, items) do
+fn collect_ul(lines, items) do
   match lines do
   Nil -> (List.reverse(items), Nil)
   Cons(line, rest) ->
@@ -196,7 +180,7 @@ pfn collect_ul(lines, items) do
   end
 end
 
-pfn collect_ol(lines, items) do
+fn collect_ol(lines, items) do
   match lines do
   Nil -> (List.reverse(items), Nil)
   Cons(line, rest) ->
@@ -206,7 +190,7 @@ pfn collect_ol(lines, items) do
   end
 end
 
-pfn collect_blockquote(lines, items) do
+fn collect_blockquote(lines, items) do
   match lines do
   Nil -> (List.reverse(items), Nil)
   Cons(line, rest) ->
@@ -216,11 +200,11 @@ pfn collect_blockquote(lines, items) do
   end
 end
 
-pfn render_list_items(items) do
+fn render_list_items(items) do
   String.join(List.map(items, fn item -> "<li>" ++ render_inline(item) ++ "</li>"), "")
 end
 
-pfn render_admonition(items) do
+fn render_admonition(items) do
   let text = String.join(items, " ")
   -- Detect Note/Warning from **Note:** or **Warning:** pattern
   let kind = if String.starts_with(text, "**Note") do "note"
@@ -229,7 +213,7 @@ pfn render_admonition(items) do
   "<div class=\"admonition " ++ kind ++ "\">" ++ render_inline(text) ++ "</div>"
 end
 
-pfn md_step_text(line, rest, buf, out, go) do
+fn md_step_text(line, rest, buf, out, go) do
   let t = String.trim(line)
   if is_fence(t) do go(rest, Nil, Cons("<pre><code>", flush_para(buf, out)), true)
   else
