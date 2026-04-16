@@ -1,0 +1,184 @@
+-- Tests for the Guides module.
+
+mod TestGuides do
+
+describe "Guides" do
+
+  describe "display_name" do
+
+    test "hyphenated filename becomes spaced title" do
+      assert (Guides.display_name("getting-started.md") == "Getting started")
+    end
+
+    test "underscore filename becomes spaced title" do
+      assert (Guides.display_name("quick_start.md") == "Quick start")
+    end
+
+    test "single word filename capitalized" do
+      assert (Guides.display_name("guide.md") == "Guide")
+    end
+
+    test "filename without .md extension works" do
+      assert (Guides.display_name("installation") == "Installation")
+    end
+
+    test "already uppercase first char unchanged" do
+      assert (Guides.display_name("Overview.md") == "Overview")
+    end
+
+    test "multiple hyphens produce spaces" do
+      assert (Guides.display_name("a-b-c.md") == "A b c")
+    end
+
+    test "mixed hyphens and underscores" do
+      assert (Guides.display_name("get_the-guide.md") == "Get the guide")
+    end
+
+  end
+
+  describe "sidebar_links" do
+
+    test "empty list returns empty string" do
+      let result = Guides.sidebar_links(Nil)
+      assert (result == "")
+    end
+
+    test "single guide produces anchor tag" do
+      let result = Guides.sidebar_links(Cons("intro.md", Nil))
+      assert (String.contains(result, "<a "))
+      assert (String.contains(result, "intro.html"))
+    end
+
+    test "link uses sl CSS class" do
+      let result = Guides.sidebar_links(Cons("test.md", Nil))
+      assert (String.contains(result, "class=\"sl\""))
+    end
+
+    test "link href is under guides/ subdirectory" do
+      let result = Guides.sidebar_links(Cons("intro.md", Nil))
+      assert (String.contains(result, "guides/intro.html"))
+    end
+
+    test "display name appears in link text" do
+      let result = Guides.sidebar_links(Cons("getting-started.md", Nil))
+      assert (String.contains(result, "Getting started"))
+    end
+
+    test "multiple guides produce multiple links" do
+      let result = Guides.sidebar_links(Cons("intro.md", Cons("advanced.md", Nil)))
+      assert (String.contains(result, "intro.html"))
+      assert (String.contains(result, "advanced.html"))
+      assert (String.contains(result, "Intro"))
+      assert (String.contains(result, "Advanced"))
+    end
+
+    test "special chars in filename are escaped in href" do
+      let result = Guides.sidebar_links(Cons("my guide.md", Nil))
+      assert (String.contains(result, "guides/"))
+      assert (!String.contains(result, "<script"))
+    end
+
+  end
+
+  describe "discover" do
+
+    test "nonexistent directory returns empty list" do
+      let r = Guides.discover("/tmp/no_such_guides_dir_xyz123_march_doc")
+      assert (List.is_empty(r))
+    end
+
+    test "empty directory returns empty list" do
+      match Dir.mkdir_p("/tmp/march_doc_guides_empty_dir") do Ok(_) -> () | Err(_) -> () end
+      let r = Guides.discover("/tmp/march_doc_guides_empty_dir")
+      assert (List.is_empty(r))
+    end
+
+    test "finds only .md files, ignores others" do
+      let dir = "/tmp/march_doc_guides_filter"
+      match Dir.mkdir_p(dir) do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/intro.md", "# Intro") do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/notes.txt", "not md") do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/guide.md", "# Guide") do Ok(_) -> () | Err(_) -> () end
+      let r = Guides.discover(dir)
+      assert (List.length(r) == 2)
+      let md_count = List.length(List.filter(r, fn f -> String.ends_with(f, ".md")))
+      assert (md_count == 2)
+    end
+
+    test "returns filenames (not full paths)" do
+      let dir = "/tmp/march_doc_guides_names"
+      match Dir.mkdir_p(dir) do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/intro.md", "# Intro") do Ok(_) -> () | Err(_) -> () end
+      let r = Guides.discover(dir)
+      let first = match List.head_opt(r) do None -> "" | Some(f) -> f end
+      assert (first == "intro.md")
+    end
+
+    test "results are sorted alphabetically" do
+      let dir = "/tmp/march_doc_guides_sorted"
+      match Dir.mkdir_p(dir) do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/z.md", "") do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/a.md", "") do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/m.md", "") do Ok(_) -> () | Err(_) -> () end
+      let r = Guides.discover(dir)
+      assert (List.length(r) == 3)
+      let first = match List.head_opt(r) do None -> "z" | Some(f) -> f end
+      assert (first == "a.md")
+    end
+
+  end
+
+  describe "render_guide" do
+
+    test "returns correct output filename" do
+      let dir = "/tmp/march_doc_guide_render_name"
+      match Dir.mkdir_p(dir) do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/intro.md", "# Intro\n\nHello.") do Ok(_) -> () | Err(_) -> () end
+      let (filename, _) = Guides.render_guide(dir, "intro.md", "")
+      assert (filename == "intro.html")
+    end
+
+    test "rendered HTML contains guide content" do
+      let dir = "/tmp/march_doc_guide_render_content"
+      match Dir.mkdir_p(dir) do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/intro.md", "# Intro\n\nHello world.") do Ok(_) -> () | Err(_) -> () end
+      let (_, html) = Guides.render_guide(dir, "intro.md", "")
+      assert (String.contains(html, "Hello world"))
+    end
+
+    test "rendered HTML contains page structure" do
+      let dir = "/tmp/march_doc_guide_render_struct"
+      match Dir.mkdir_p(dir) do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/guide.md", "# Guide\n\nContent.") do Ok(_) -> () | Err(_) -> () end
+      let (_, html) = Guides.render_guide(dir, "guide.md", "")
+      assert (String.contains(html, "<!DOCTYPE html>"))
+      assert (String.contains(html, "<style>"))
+    end
+
+    test "missing guide file produces error message in HTML" do
+      let (_, html) = Guides.render_guide("/tmp/no_such_guides_dir_xyz", "missing.md", "")
+      assert (String.contains(html, "Could not read guide"))
+    end
+
+    test "rendered HTML includes display name in title" do
+      let dir = "/tmp/march_doc_guide_render_title"
+      match Dir.mkdir_p(dir) do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/getting-started.md", "# Getting Started\n\nWelcome.") do Ok(_) -> () | Err(_) -> () end
+      let (_, html) = Guides.render_guide(dir, "getting-started.md", "")
+      assert (String.contains(html, "Getting started"))
+    end
+
+    test "sidebar is included in rendered HTML" do
+      let dir = "/tmp/march_doc_guide_render_sidebar"
+      match Dir.mkdir_p(dir) do Ok(_) -> () | Err(_) -> () end
+      match File.write(dir ++ "/intro.md", "# Intro\n\nText.") do Ok(_) -> () | Err(_) -> () end
+      let sidebar = "<nav>MySidebar</nav>"
+      let (_, html) = Guides.render_guide(dir, "intro.md", sidebar)
+      assert (String.contains(html, "MySidebar"))
+    end
+
+  end
+
+end
+
+end

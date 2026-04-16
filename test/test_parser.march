@@ -3,7 +3,7 @@
 mod TestParser do
 
 -- Helper: write a temp file and parse it
-pfn parse_src(name, src, include_private) do
+fn parse_src(name, src, include_private) do
   let path = "/tmp/march_doc_test_" ++ name ++ ".march"
   match File.write(path, src) do
     Ok(_) -> Parser.parse_file(path, include_private)
@@ -23,7 +23,7 @@ describe "Parser" do
       match e do FnEntry(n, s, d, p, _) ->
         assert (n == "hello")
         assert (s == "hello(x : Int) : String")
-        assert (d == Some("A doc"))
+        match d do Some(t) -> assert (t == "A doc") | None -> assert false end
         assert (p == false)
       end
     end
@@ -46,7 +46,7 @@ describe "Parser" do
       match t do TypeEntry(n, s, d, _) ->
         assert (n == "Color")
         assert (s == "Color = Red | Blue")
-        assert (d == Some("A color type"))
+        match d do Some(t) -> assert (t == "A color type") | None -> assert false end
       end
     end
 
@@ -64,7 +64,7 @@ describe "Parser" do
       match i do IfaceEntry(n, s, d, ms, _) ->
         assert (n == "Show")
         assert (s == "Show")
-        assert (d == Some("Show things"))
+        match d do Some(t) -> assert (t == "Show things") | None -> assert false end
         assert (List.length(ms) == 1)
       end
     end
@@ -83,7 +83,7 @@ describe "Parser" do
       assert (Parser.info_name(m) == "MyMod")
       match m do ModuleInfo(n, c, fns, ts, is, _) ->
         assert (n == "MyMod")
-        assert (c == Some("Module doc"))
+        match c do Some(t) -> assert (t == "Module doc") | None -> assert false end
         assert (List.length(fns) == 1)
         assert (List.length(ts) == 1)
         assert (List.is_empty(is))
@@ -167,8 +167,8 @@ describe "Parser" do
       let e1 = FnEntry("f1", "f1()", Some("doc1"), false, 0)
       let e2 = FnEntry("f2", "f2()", Some("doc2"), false, 0)
       let e3 = FnEntry("f3", "f3()", None, false, 0)
-      match e1 do FnEntry(_, _, d, _, _) -> assert (d == Some("doc1")) end
-      match e2 do FnEntry(_, _, d, _, _) -> assert (d == Some("doc2")) end
+      match e1 do FnEntry(_, _, d, _, _) -> match d do Some(t) -> assert (t == "doc1") | None -> assert false end end
+      match e2 do FnEntry(_, _, d, _, _) -> match d do Some(t) -> assert (t == "doc2") | None -> assert false end end
       match e3 do FnEntry(_, _, d, _, _) -> assert (d == None) end
     end
 
@@ -192,7 +192,7 @@ describe "Parser" do
       match t2 do TypeEntry(n, s, d, _) ->
         assert (n == "B")
         assert (String.contains(s, "Int"))
-        assert (d == Some("docs"))
+        match d do Some(t) -> assert (t == "docs") | None -> assert false end
       end
       match t3 do TypeEntry(n, s, _, _) ->
         assert (n == "C")
@@ -208,7 +208,7 @@ describe "Parser" do
       match i2 do IfaceEntry(_, _, _, ms, _) -> assert (List.length(ms) == 1) end
       match i3 do IfaceEntry(_, _, d, ms, _) ->
         assert (List.length(ms) == 2)
-        assert (d == Some("doc"))
+        match d do Some(t) -> assert (t == "doc") | None -> assert false end
       end
     end
 
@@ -220,7 +220,7 @@ describe "Parser" do
       assert (Parser.info_name(m2) == "M2")
       assert (Parser.info_name(m3) == "M3")
       match m1 do ModuleInfo(_, c, _, _, _, _) -> assert (c == None) end
-      match m2 do ModuleInfo(_, c, _, _, _, _) -> assert (c == Some("short")) end
+      match m2 do ModuleInfo(_, c, _, _, _, _) -> match c do Some(t) -> assert (t == "short") | None -> assert false end end
       match m3 do ModuleInfo(_, c, _, _, _, _) ->
         match c do
           Some(t) -> assert (String.contains(t, "longer"))
@@ -289,7 +289,7 @@ describe "Parser" do
             assert (Parser.is_pub(e))
             match e do FnEntry(n, _, d, _, _) ->
               assert (n == "x")
-              assert (d == Some("xd"))
+              match d do Some(t) -> assert (t == "xd") | None -> assert false end
             end
           None -> assert false
         end
@@ -302,7 +302,7 @@ describe "Parser" do
       match List.head_opt(ts) do
         Some(te) -> match te do TypeEntry(n, _, d, _) ->
           assert (n == "T1")
-          assert (d == Some("td"))
+          match d do Some(t) -> assert (t == "td") | None -> assert false end
         end
         None -> assert false
       end
@@ -314,7 +314,7 @@ describe "Parser" do
       match List.head_opt(is) do
         Some(ie) -> match ie do IfaceEntry(n, _, d, _, _) ->
           assert (n == "I1")
-          assert (d == Some("id"))
+          match d do Some(t) -> assert (t == "id") | None -> assert false end
         end
         None -> assert false
       end
@@ -361,7 +361,7 @@ describe "Parser" do
       end
       match e3 do FnEntry(n, _, d, _, _) ->
         assert (n == "delete")
-        assert (d == Some("Deletes a file"))
+        match d do Some(t) -> assert (t == "Deletes a file") | None -> assert false end
       end
     end
 
@@ -378,7 +378,7 @@ describe "Parser" do
         assert (n == "Result")
         assert (String.contains(s, "Ok"))
         assert (String.contains(s, "Err"))
-        assert (d == Some("Result type"))
+        match d do Some(t) -> assert (t == "Result type") | None -> assert false end
       end
       match t3 do TypeEntry(n, s, _, _) ->
         assert (n == "List")
@@ -605,7 +605,7 @@ describe "Parser" do
               None -> assert false
               Some(e) -> match e do FnEntry(name, _, d, _, _) ->
                 assert (name == "hello")
-                assert (d == Some("This is hello"))
+                match d do Some(t) -> assert (t == "This is hello") | None -> assert false end
               end
             end
           end
@@ -849,7 +849,7 @@ describe "Parser" do
         Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("Orphaned")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> match d do Some(t) -> assert (t == "Orphaned") | None -> assert false end end
           end
         end
       end
@@ -905,7 +905,7 @@ describe "Parser" do
               Some(e) -> match e do FnEntry(n, s, d, p, _) ->
                 assert (n == "func")
                 assert (String.contains(s, "Int"))
-                assert (d == Some("Function doc"))
+                match d do Some(t) -> assert (t == "Function doc") | None -> assert false end
                 assert (p == false)
               end
             end
@@ -914,7 +914,7 @@ describe "Parser" do
               None -> assert false
               Some(te) -> match te do TypeEntry(n, s, d, _) ->
                 assert (n == "Color")
-                assert (d == Some("Type doc"))
+                match d do Some(t) -> assert (t == "Type doc") | None -> assert false end
                 assert (String.contains(s, "Red"))
               end
             end
@@ -923,7 +923,7 @@ describe "Parser" do
               None -> assert false
               Some(ie) -> match ie do IfaceEntry(n, _, d, _, _) ->
                 assert (n == "Show")
-                assert (d == Some("Interface doc"))
+                match d do Some(t) -> assert (t == "Interface doc") | None -> assert false end
               end
             end
           end
@@ -992,7 +992,7 @@ describe "Parser" do
         Some(info) -> match info do ModuleInfo(_, _, _, types, _, _) ->
           match List.head_opt(types) do
             None -> assert false
-            Some(te) -> match te do TypeEntry(_, _, d, _) -> assert (d == Some("A color")) end
+            Some(te) -> match te do TypeEntry(_, _, d, _) -> match d do Some(t) -> assert (t == "A color") | None -> assert false end end
           end
         end
       end
@@ -1004,7 +1004,7 @@ describe "Parser" do
         Some(info) -> match info do ModuleInfo(_, _, _, _, ifaces, _) ->
           match List.head_opt(ifaces) do
             None -> assert false
-            Some(ie) -> match ie do IfaceEntry(_, _, d, _, _) -> assert (d == Some("Printable")) end
+            Some(ie) -> match ie do IfaceEntry(_, _, d, _, _) -> match d do Some(t) -> assert (t == "Printable") | None -> assert false end end
           end
         end
       end
@@ -1018,7 +1018,7 @@ describe "Parser" do
             None -> assert false
             Some(te) -> match te do TypeEntry(name, s, d, _) ->
               assert (name == "Internal")
-              assert (d == Some("Private type"))
+              match d do Some(t) -> assert (t == "Private type") | None -> assert false end
               assert (String.contains(s, "ptype"))
             end
           end
@@ -1032,7 +1032,7 @@ describe "Parser" do
         Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("second")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> match d do Some(t) -> assert (t == "second") | None -> assert false end end
           end
         end
       end
@@ -1058,7 +1058,7 @@ describe "Parser" do
         Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("the doc")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> match d do Some(t) -> assert (t == "the doc") | None -> assert false end end
           end
         end
       end
@@ -1137,7 +1137,7 @@ describe "Parser" do
         Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("Returns a & b")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> match d do Some(t) -> assert (t == "Returns a & b") | None -> assert false end end
           end
         end
       end
@@ -1149,7 +1149,7 @@ describe "Parser" do
         Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> match d do Some(t) -> assert (t == "") | None -> assert false end end
           end
         end
       end
@@ -1161,7 +1161,7 @@ describe "Parser" do
         Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
           match List.head_opt(fns) do
             None -> assert false
-            Some(e) -> match e do FnEntry(_, _, d, _, _) -> assert (d == Some("")) end
+            Some(e) -> match e do FnEntry(_, _, d, _, _) -> match d do Some(t) -> assert (t == "") | None -> assert false end end
           end
         end
       end

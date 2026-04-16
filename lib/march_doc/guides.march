@@ -2,19 +2,128 @@
 
 mod Guides do
 
+-- Uppercase a single ASCII lowercase letter a-z; leaves other chars unchanged.
+pfn ascii_upper(ch) do
+  if ch == "a" do "A"
+  else if ch == "b" do "B"
+  else if ch == "c" do "C"
+  else if ch == "d" do "D"
+  else if ch == "e" do "E"
+  else if ch == "f" do "F"
+  else if ch == "g" do "G"
+  else if ch == "h" do "H"
+  else if ch == "i" do "I"
+  else if ch == "j" do "J"
+  else if ch == "k" do "K"
+  else if ch == "l" do "L"
+  else if ch == "m" do "M"
+  else if ch == "n" do "N"
+  else if ch == "o" do "O"
+  else if ch == "p" do "P"
+  else if ch == "q" do "Q"
+  else if ch == "r" do "R"
+  else if ch == "s" do "S"
+  else if ch == "t" do "T"
+  else if ch == "u" do "U"
+  else if ch == "v" do "V"
+  else if ch == "w" do "W"
+  else if ch == "x" do "X"
+  else if ch == "y" do "Y"
+  else if ch == "z" do "Z"
+  else ch end end end end end end end end end end end end end end end end end end end end end end end end end end
+end
+
+-- Map a filename character to an integer for alphabetical ordering.
+pfn char_ord(ch) do
+  if ch == "-" do 1
+  else if ch == "_" do 2
+  else if ch == "." do 3
+  else if ch == "0" do 10
+  else if ch == "1" do 11
+  else if ch == "2" do 12
+  else if ch == "3" do 13
+  else if ch == "4" do 14
+  else if ch == "5" do 15
+  else if ch == "6" do 16
+  else if ch == "7" do 17
+  else if ch == "8" do 18
+  else if ch == "9" do 19
+  else if ch == "a" do 20
+  else if ch == "b" do 21
+  else if ch == "c" do 22
+  else if ch == "d" do 23
+  else if ch == "e" do 24
+  else if ch == "f" do 25
+  else if ch == "g" do 26
+  else if ch == "h" do 27
+  else if ch == "i" do 28
+  else if ch == "j" do 29
+  else if ch == "k" do 30
+  else if ch == "l" do 31
+  else if ch == "m" do 32
+  else if ch == "n" do 33
+  else if ch == "o" do 34
+  else if ch == "p" do 35
+  else if ch == "q" do 36
+  else if ch == "r" do 37
+  else if ch == "s" do 38
+  else if ch == "t" do 39
+  else if ch == "u" do 40
+  else if ch == "v" do 41
+  else if ch == "w" do 42
+  else if ch == "x" do 43
+  else if ch == "y" do 44
+  else if ch == "z" do 45
+  else 50 end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+end
+
+-- Compare two strings lexicographically using char_ord (for reliable sort).
+pfn str_lt(a, b) do
+  let na = String.byte_size(a)
+  let nb = String.byte_size(b)
+  if na == 0 && nb == 0 do false
+  else if na == 0 do true
+  else if nb == 0 do false
+  else
+    let ca = char_ord(String.slice(a, 0, 1))
+    let cb = char_ord(String.slice(b, 0, 1))
+    if ca < cb do true
+    else if ca > cb do false
+    else str_lt(String.slice(a, 1, na - 1), String.slice(b, 1, nb - 1)) end end
+  end end end
+end
+
+-- Insert a string into a sorted list (insertion sort helper).
+pfn insert_sorted(name, sorted) do
+  match sorted do
+  Nil -> Cons(name, Nil)
+  Cons(head, tail) ->
+    if str_lt(name, head) do Cons(name, sorted)
+    else Cons(head, insert_sorted(name, tail)) end
+  end
+end
+
+-- Sort a list of strings using insertion sort (avoids lambda-based sort).
+pfn sort_strings(files) do
+  match files do
+  Nil -> Nil
+  Cons(head, tail) -> insert_sorted(head, sort_strings(tail))
+  end
+end
+
 -- Discover .md files in a guides/ directory.
 fn discover(guides_dir : String) : List(String) do
   if Dir.exists(guides_dir) do
-    let entries = Dir.list(guides_dir)
-    List.sort_by(
-      List.filter(entries, fn name -> String.ends_with(name, ".md")),
-      fn (a, b) -> a < b
-    )
+    let entries = match Dir.list(guides_dir) do
+      Err(_) -> Nil
+      Ok(list) -> list
+    end
+    sort_strings(List.filter(entries, fn name -> String.ends_with(name, ".md")))
   else Nil end
 end
 
--- Derive a display name from a filename: "getting-started.md" → "Getting Started"
-pfn display_name(filename) do
+-- Derive a display name from a filename: "getting-started.md" → "Getting started"
+fn display_name(filename) do
   let base = if String.ends_with(filename, ".md") do
     Markdown.drop_suffix(filename, ".md")
   else filename end
@@ -23,12 +132,7 @@ pfn display_name(filename) do
   if String.byte_size(spaced) > 0 do
     let first = String.slice(spaced, 0, 1)
     let rest = String.slice(spaced, 1, String.byte_size(spaced) - 1)
-    -- Simple uppercase for ASCII a-z
-    let upper = if first >= "a" && first <= "z" do
-      -- Convert to uppercase via char code offset
-      String.from_codepoint(String.codepoint_at(first, 0) - 32)
-    else first end
-    upper ++ rest
+    ascii_upper(first) ++ rest
   else spaced end
 end
 

@@ -3,7 +3,7 @@
 mod TestIntegration do
 
 -- Shared setup helper: write source, generate docs, return output dir
-pfn setup_and_generate(name, files, include_private) do
+fn setup_and_generate(name, files, include_private) do
   let src_dir = "/tmp/march_doc_integ_" ++ name ++ "_src"
   let out_dir = "/tmp/march_doc_integ_" ++ name ++ "_out"
   match Dir.mkdir_p(src_dir) do Err(_) -> () | Ok(_) -> () end
@@ -17,7 +17,7 @@ pfn setup_and_generate(name, files, include_private) do
   out_dir
 end
 
-pfn read_file(path) do
+fn read_file(path) do
   match File.read(path) do
     Ok(content) -> content
     Err(_) -> ""

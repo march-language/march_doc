@@ -1,0 +1,243 @@
+-- Tests for the Scroll module.
+
+mod TestScroll do
+
+describe "Scroll" do
+
+  describe "extract_code_blocks" do
+
+    test "None returns empty list" do
+      let blocks = Scroll.extract_code_blocks(None)
+      assert (List.is_empty(blocks))
+    end
+
+    test "doc with no code fence returns empty list" do
+      let blocks = Scroll.extract_code_blocks(Some("Just prose."))
+      assert (List.is_empty(blocks))
+    end
+
+    test "single march code block extracted" do
+      let fence = "```"
+      let md = "Some prose.\n\n" ++ fence ++ "march\nlet x = 1\n" ++ fence
+      let blocks = Scroll.extract_code_blocks(Some(md))
+      assert (List.length(blocks) == 1)
+      let first = match List.head_opt(blocks) do None -> "" | Some(b) -> b end
+      assert (String.contains(first, "let x = 1"))
+    end
+
+    test "multiple code blocks all extracted" do
+      let fence = "```"
+      let md = fence ++ "march\nfoo()\n" ++ fence ++ "\n\nsome text\n\n" ++ fence ++ "march\nbar()\n" ++ fence
+      let blocks = Scroll.extract_code_blocks(Some(md))
+      assert (List.length(blocks) == 2)
+    end
+
+    test "non-march fence is ignored" do
+      let fence = "```"
+      let md = fence ++ "elixir\nIO.puts \"hi\"\n" ++ fence
+      let blocks = Scroll.extract_code_blocks(Some(md))
+      assert (List.is_empty(blocks))
+    end
+
+    test "empty doc string returns empty list" do
+      let blocks = Scroll.extract_code_blocks(Some(""))
+      assert (List.is_empty(blocks))
+    end
+
+    test "code block content excludes fence lines" do
+      let fence = "```"
+      let md = fence ++ "march\nfn f() do 1 end\n" ++ fence
+      let blocks = Scroll.extract_code_blocks(Some(md))
+      assert (List.length(blocks) == 1)
+      let code = match List.head_opt(blocks) do None -> "" | Some(b) -> b end
+      assert (String.contains(code, "fn f() do 1 end"))
+    end
+
+  end
+
+  describe "render_fn_section" do
+
+    test "fn with no doc produces empty string" do
+      let entry = FnEntry("f", "f()", None, false, 0)
+      let result = Scroll.render_fn_section(entry)
+      assert (result == "")
+    end
+
+    test "fn with prose-only doc produces empty string" do
+      let entry = FnEntry("f", "f()", Some("Just prose, no examples."), false, 0)
+      let result = Scroll.render_fn_section(entry)
+      assert (result == "")
+    end
+
+    test "fn with code block produces non-empty section" do
+      let fence = "```"
+      let entry = FnEntry("f", "f()", Some(fence ++ "march\nlet x = 1\n" ++ fence), false, 0)
+      let result = Scroll.render_fn_section(entry)
+      assert (String.byte_size(result) > 0)
+    end
+
+    test "fn section contains the function signature" do
+      let fence = "```"
+      let entry = FnEntry("ok", "ok() : Int", Some(fence ++ "march\nok()\n" ++ fence), false, 0)
+      let result = Scroll.render_fn_section(entry)
+      assert (String.contains(result, "ok() : Int"))
+    end
+
+    test "fn section contains the code" do
+      let fence = "```"
+      let entry = FnEntry("f", "f()", Some(fence ++ "march\nlet answer = 42\n" ++ fence), false, 0)
+      let result = Scroll.render_fn_section(entry)
+      assert (String.contains(result, "let answer = 42"))
+    end
+
+    test "fn section includes prose from doc" do
+      let fence = "```"
+      let entry = FnEntry("f", "f()", Some("This does something useful.\n\n" ++ fence ++ "march\nf()\n" ++ fence), false, 0)
+      let result = Scroll.render_fn_section(entry)
+      assert (String.contains(result, "This does something useful."))
+    end
+
+    test "fn section starts with markdown heading" do
+      let fence = "```"
+      let entry = FnEntry("ok", "ok()", Some(fence ++ "march\nok()\n" ++ fence), false, 0)
+      let result = Scroll.render_fn_section(entry)
+      assert (String.starts_with(result, "## fn "))
+    end
+
+  end
+
+  describe "render_type_section" do
+
+    test "type with no doc produces empty string" do
+      let entry = TypeEntry("Color", "Color = Red | Blue", None, 0)
+      let result = Scroll.render_type_section(entry)
+      assert (result == "")
+    end
+
+    test "type with prose-only doc produces empty string" do
+      let entry = TypeEntry("Color", "Color = Red | Blue", Some("Just prose."), 0)
+      let result = Scroll.render_type_section(entry)
+      assert (result == "")
+    end
+
+    test "type with code block produces non-empty section" do
+      let fence = "```"
+      let entry = TypeEntry("Color", "Color = Red | Blue", Some(fence ++ "march\nlet c = Red\n" ++ fence), 0)
+      let result = Scroll.render_type_section(entry)
+      assert (String.byte_size(result) > 0)
+    end
+
+    test "type section contains the type signature" do
+      let fence = "```"
+      let entry = TypeEntry("Color", "Color = Red | Blue", Some(fence ++ "march\nlet c = Red\n" ++ fence), 0)
+      let result = Scroll.render_type_section(entry)
+      assert (String.contains(result, "Color = Red | Blue"))
+    end
+
+    test "type section contains the code" do
+      let fence = "```"
+      let entry = TypeEntry("Color", "Color = Red | Blue", Some(fence ++ "march\nlet c = Red\n" ++ fence), 0)
+      let result = Scroll.render_type_section(entry)
+      assert (String.contains(result, "let c = Red"))
+    end
+
+    test "type section starts with markdown heading" do
+      let fence = "```"
+      let entry = TypeEntry("Color", "Color = Red | Blue", Some(fence ++ "march\nlet c = Red\n" ++ fence), 0)
+      let result = Scroll.render_type_section(entry)
+      assert (String.starts_with(result, "## type "))
+    end
+
+  end
+
+  describe "render_module" do
+
+    test "module with no code blocks returns None" do
+      let info = ModuleInfo("MyMod", None, Cons(FnEntry("f", "f()", None, false, 0), Nil), Nil, Nil, "")
+      let result = Scroll.render_module(info)
+      assert (result == None)
+    end
+
+    test "module with prose-only docs returns None" do
+      let info = ModuleInfo("MyMod", None, Cons(FnEntry("f", "f()", Some("prose only"), false, 0), Nil), Nil, Nil, "")
+      let result = Scroll.render_module(info)
+      assert (result == None)
+    end
+
+    test "module with fn code block returns Some" do
+      let fence = "```"
+      let info = ModuleInfo("MyMod", None, Cons(FnEntry("f", "f()", Some(fence ++ "march\nlet x = 1\n" ++ fence), false, 0), Nil), Nil, Nil, "")
+      let result = Scroll.render_module(info)
+      assert (result != None)
+    end
+
+    test "render_module filename includes module name" do
+      let fence = "```"
+      let info = ModuleInfo("MyMod", None, Cons(FnEntry("ok", "ok()", Some(fence ++ "march\nok()\n" ++ fence), false, 0), Nil), Nil, Nil, "")
+      match Scroll.render_module(info) do
+        None -> assert false
+        Some((filename, _)) -> assert (String.contains(filename, "MyMod"))
+      end
+    end
+
+    test "render_module filename ends with .scroll.md" do
+      let fence = "```"
+      let info = ModuleInfo("Foo", None, Cons(FnEntry("foo", "foo()", Some(fence ++ "march\nfoo()\n" ++ fence), false, 0), Nil), Nil, Nil, "")
+      match Scroll.render_module(info) do
+        None -> assert false
+        Some((filename, _)) -> assert (String.ends_with(filename, ".scroll.md"))
+      end
+    end
+
+    test "render_module content includes module name heading" do
+      let fence = "```"
+      let info = ModuleInfo("MyMod", None, Cons(FnEntry("f", "f()", Some(fence ++ "march\nlet x = 1\n" ++ fence), false, 0), Nil), Nil, Nil, "")
+      match Scroll.render_module(info) do
+        None -> assert false
+        Some((_, content)) -> assert (String.contains(content, "MyMod"))
+      end
+    end
+
+    test "render_module content includes code" do
+      let fence = "```"
+      let info = ModuleInfo("MyMod", None, Cons(FnEntry("f", "f()", Some(fence ++ "march\nlet answer = 42\n" ++ fence), false, 0), Nil), Nil, Nil, "")
+      match Scroll.render_module(info) do
+        None -> assert false
+        Some((_, content)) -> assert (String.contains(content, "let answer = 42"))
+      end
+    end
+
+    test "module comment included in scroll content" do
+      let fence = "```"
+      let info = ModuleInfo("Mod", Some("Module level doc."), Cons(FnEntry("ok", "ok()", Some(fence ++ "march\nok()\n" ++ fence), false, 0), Nil), Nil, Nil, "")
+      match Scroll.render_module(info) do
+        None -> assert false
+        Some((_, content)) -> assert (String.contains(content, "Module level doc."))
+      end
+    end
+
+    test "type with code block included in scroll" do
+      let fence = "```"
+      let info = ModuleInfo("Mod", None, Nil, Cons(TypeEntry("Color", "Color = Red | Blue", Some(fence ++ "march\nlet c = Red\n" ++ fence), 0), Nil), Nil, "")
+      match Scroll.render_module(info) do
+        None -> assert false
+        Some((_, content)) ->
+          assert (String.contains(content, "Color"))
+          assert (String.contains(content, "let c = Red"))
+      end
+    end
+
+    test "scroll filename is ModuleName.scroll.md" do
+      let fence = "```"
+      let info = ModuleInfo("Parser", None, Cons(FnEntry("ok", "ok()", Some(fence ++ "march\nok()\n" ++ fence), false, 0), Nil), Nil, Nil, "")
+      match Scroll.render_module(info) do
+        None -> assert false
+        Some((filename, _)) -> assert (filename == "Parser.scroll.md")
+      end
+    end
+
+  end
+
+end
+
+end

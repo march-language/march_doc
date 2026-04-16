@@ -3,14 +3,14 @@
 mod SearchIndex do
 
 -- Extract the first line of a doc string as a summary.
-pfn first_line(s) do
+fn first_line(s) do
   match String.split_first(s, "\n") do
     None -> String.trim(s)
     Some((line, _)) -> String.trim(line)
   end
 end
 
-pfn entry(mod_name, kind, name, signature, doc_opt) do
+fn entry(mod_name, kind, name, signature, doc_opt) do
   let doc_text = match doc_opt do
     None -> ""
     Some(d) -> first_line(d)
@@ -24,7 +24,7 @@ pfn entry(mod_name, kind, name, signature, doc_opt) do
   ])
 end
 
-pfn module_entries(info) do
+fn module_entries(info) do
   match info do
     ModuleInfo(mod_name, comment_opt, fns, types, ifaces, _) ->
       let mod_entry = entry(mod_name, "module", mod_name, "", comment_opt)
@@ -34,6 +34,7 @@ pfn module_entries(info) do
           FnEntry(name, dsig, doc_opt, is_private, _) ->
             let kind = if is_private do "pfn" else "fn" end
             entry(mod_name, kind, name, dsig, doc_opt)
+          _ -> Json.Object([])
         end
       )
 
@@ -42,6 +43,7 @@ pfn module_entries(info) do
           TypeEntry(name, dsig, doc_opt, _) ->
             let kind = if String.starts_with(dsig, "ptype") do "ptype" else "type" end
             entry(mod_name, kind, name, dsig, doc_opt)
+          _ -> Json.Object([])
         end
       )
 
@@ -49,14 +51,16 @@ pfn module_entries(info) do
         match e do
           IfaceEntry(name, dsig, doc_opt, _, _) ->
             entry(mod_name, "interface", name, dsig, doc_opt)
+          _ -> Json.Object([])
         end
       )
 
       Cons(mod_entry, List.append(fn_entries, List.append(type_entries, iface_entries)))
+    _ -> Nil
   end
 end
 
-fn build(modules : List(Parser.ModuleInfo)) : String do
+fn build(modules : List(ModuleInfo)) : String do
   let all_entries = List.flat_map(modules, module_entries)
   Json.to_string(Json.Array(all_entries))
 end
