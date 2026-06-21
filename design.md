@@ -1,61 +1,75 @@
 # March Design System
 
-A portable design system for March language projects. Near-black dark theme with teal and blue brand accents.
+A portable design system for March language projects, aligned with the
+[march-lang.org](https://march-lang.org) homepage. Deep-navy dark theme with a
+cyan (oklch) accent, **Lora** serif headings, and **JetBrains Mono** for code
+and labels.
 
 ---
 
 ## Color Palette
 
+Colors are defined as CSS custom properties on `:root` (dark, default) with a
+`[data-theme="light"]` override. The accent and badge hues use `oklch()` so they
+stay perceptually consistent across both themes.
+
 ### Dark Theme (default)
 
-| Token | Hex | Usage |
-|-------|-----|-------|
-| `--bg` | `#09090b` | Page background |
-| `--sb` | `#0f0f12` | Sidebar, top bar, modal backgrounds |
-| `--card` | `#141418` | Cards, surfaces, elevated elements |
-| `--bdr` | `#23252b` | Borders, dividers, separators |
-| `--code` | `#0c0c0f` | Code block backgrounds |
-| `--text` | `#d4d4d8` | Primary body text |
-| `--dim` | `#71717a` | Secondary text, labels, captions |
-| `--bright` | `#fafafa` | Headings, emphasis, high-contrast text |
-| `--acc` | `#6FE3D6` | **Primary accent** (teal) -- links, active states, interactive elements |
-| `--acc2` | `#3ABFF8` | **Secondary accent** (blue) -- hover states, type cross-links, alternate highlights |
-| `--fn` | `#36D399` | Function badge, success states (green) |
-| `--ty` | `#FBBF24` | Type badge, warning states (amber) |
-| `--if` | `#3ABFF8` | Interface badge, info states (blue) |
-| `--prv` | `#3f3f46` | Private/muted badge, disabled states (zinc) |
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--bg` | `#07101a` | Page background (deep navy) |
+| `--sb` | `#0a1622` | Sidebar, search modal background |
+| `--bg-nav` | `rgba(7,16,26,0.92)` | Top bar (translucent, blurred) |
+| `--card` | `#0c1928` | Cards, surfaces, code-block background |
+| `--bdr` | `#0f2438` | Borders, dividers, separators |
+| `--code` | `#0c1928` | Code block background |
+| `--text` | `#cce5f5` | Primary body text (blue-tinted) |
+| `--dim` | `#4a7898` | Secondary text, labels, captions |
+| `--faint` | `#1e4060` | Faint text, chevrons, section labels |
+| `--bright` | `#eaf4fb` | Headings, emphasis, high-contrast text |
+| `--acc` | `oklch(63% 0.12 207)` | **Primary accent** (cyan) — links, active states, labels |
+| `--acc2` | `oklch(74% 0.11 200)` | **Secondary accent** (lighter cyan) — hover, type cross-links |
+| `--fn` | `oklch(74% 0.13 165)` | Function badge (green) |
+| `--ty` | `oklch(82% 0.12 70)` | Type badge (amber/gold) |
+| `--if` | `oklch(78% 0.11 235)` | Interface badge (blue) |
+| `--prv` | `#3a5f7d` | Private/muted badge (steel) |
 
 ### Light Theme
 
-| Token | Hex | Usage |
-|-------|-----|-------|
-| `--bg` | `#ffffff` | Page background |
-| `--sb` | `#f4f9fb` | Sidebar background |
-| `--card` | `#ffffff` | Cards, surfaces |
-| `--bdr` | `#d0e3eb` | Borders |
-| `--code` | `#0F2A36` | Code blocks (stays dark) |
-| `--text` | `#0B1F2A` | Primary text |
-| `--dim` | `#4a6d7a` | Secondary text |
-| `--bright` | `#0B1F2A` | Headings |
-| `--acc` | `#0d9e8f` | Primary accent (darker teal for contrast on white) |
-| `--acc2` | `#0284c7` | Secondary accent (darker blue) |
-| `--fn` | `#047857` | Function/success (darker green) |
-| `--ty` | `#b45309` | Type/warning (darker amber) |
-| `--if` | `#0284c7` | Interface/info (darker blue) |
-| `--prv` | `#8b9da7` | Private/muted |
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--bg` | `#f0f6fc` | Page background (blue-white) |
+| `--sb` | `#e3eef8` | Sidebar background |
+| `--bg-nav` | `rgba(240,246,252,0.92)` | Top bar |
+| `--card` | `#ddeaf5` | Cards, surfaces, code blocks |
+| `--bdr` | `#b5cce0` | Borders |
+| `--code` | `#ddeaf5` | Code blocks (light in light mode, like the homepage) |
+| `--text` | `#071828` | Primary text |
+| `--dim` | `#2e5c7c` | Secondary text |
+| `--faint` | `#6a96b5` | Faint text, section labels |
+| `--bright` | `#071828` | Headings |
+| `--acc` | `oklch(37% 0.11 210)` | Primary accent (darker cyan for contrast) |
+| `--acc2` | `oklch(45% 0.11 215)` | Secondary accent |
+| `--fn` | `oklch(45% 0.13 165)` | Function/success (darker green) |
+| `--ty` | `oklch(52% 0.12 70)` | Type/warning (darker amber) |
+| `--if` | `oklch(45% 0.11 235)` | Interface/info (darker blue) |
+| `--prv` | `#6a96b5` | Private/muted |
 
 ### Semantic Badges
 
-Colored pill badges identify item types. Use rgba backgrounds so they adapt to any surface:
+Pill badges identify item kinds. Backgrounds and borders are derived from the
+badge hue with `color-mix`, so they adapt to any surface and to both themes:
 
-| Badge | Background | Text Color | Usage |
-|-------|-----------|------------|-------|
-| fn | `rgba(54,211,153,.12)` | `--fn` | Public functions |
-| pfn | `rgba(61,96,112,.2)` | `--prv` | Private functions |
-| type | `rgba(251,191,36,.1)` | `--ty` | Public types |
-| ptype | `rgba(61,96,112,.15)` | `--prv` | Private types |
-| interface | `rgba(58,191,248,.1)` | `--if` | Interfaces |
-| module | `rgba(111,227,214,.1)` | `--acc` | Modules |
+| Badge | Background | Border | Text | Usage |
+|-------|-----------|--------|------|-------|
+| fn | `color-mix(in oklab, var(--fn) 13%, transparent)` | 24% | `--fn` | Public functions |
+| pfn | `color-mix(in oklab, var(--prv) 18%, transparent)` | 30% | `--prv` | Private functions |
+| type | `color-mix(in oklab, var(--ty) 12%, transparent)` | 24% | `--ty` | Public types |
+| ptype | `color-mix(in oklab, var(--prv) 15%, transparent)` | 26% | `--prv` | Private types |
+| interface | `color-mix(in oklab, var(--if) 12%, transparent)` | 24% | `--if` | Interfaces |
+| module | `color-mix(in oklab, var(--acc) 13%, transparent)` | — | `--acc` | Modules (search) |
+
+Badges are `border-radius: 100px` (pill), `JetBrains Mono`, 9px, uppercase.
 
 ---
 
@@ -63,28 +77,44 @@ Colored pill badges identify item types. Use rgba backgrounds so they adapt to a
 
 ### Font Stack
 
+Loaded from Google Fonts (`Lora` + `JetBrains Mono`) with system fallbacks:
+
 ```css
 /* Body text */
 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
 
-/* Code and signatures */
+/* Headings, brand */
+font-family: 'Lora', Georgia, serif;
+
+/* Code, signatures, labels, badges */
 font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+```
+
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,400;1,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 ```
 
 ### Scale
 
-| Element | Size | Weight | Color | Extra |
-|---------|------|--------|-------|-------|
-| Page title (h1) | 1.6rem | 700 | `--bright` | -- |
-| Section heading (h2) | .85rem | 600 | `--bright` | Uppercase, letter-spacing .04em, bottom border |
-| Body text | 15px | 400 | `--text` | Line-height 1.6 |
-| Secondary text | 13-14px | 400 | `--dim` | -- |
-| Code (inline) | 12px | 400 | `--acc` | Background `--code`, 2px 6px padding, 4px radius |
-| Code (block) | 13px | 400 | `--text` | Background `--code`, 14px 18px padding, 6px radius |
-| Badge labels | 9px | 700 | varies | Uppercase, letter-spacing .08em |
-| Breadcrumb | 12px | 400 | `--dim` | -- |
-| Sidebar links | 13px | 400/500 | `--dim`/`--acc` | 500 weight when active |
-| Sidebar heading | 10px | 700 | `--dim` | Uppercase, letter-spacing .08em |
+| Element | Font | Size | Weight | Color | Extra |
+|---------|------|------|--------|-------|-------|
+| Page title (h1) | Lora serif | 2.1rem | 600 | `--bright` | letter-spacing -.02em |
+| Section heading (h2) | JetBrains Mono | .72rem | 500 | `--acc` | Uppercase, letter-spacing .12em, bottom border |
+| Module card title (h3) | Lora serif | 1.05rem | 600 | `--acc` | — |
+| Guide heading (h3/h4) | Lora serif | 1.4 / 1.1rem | 600 | `--bright` | — |
+| Body text | sans | 15px | 400 | `--text` | Line-height 1.6 |
+| Secondary text | sans | 13–14px | 400 | `--dim` | — |
+| Code (inline) | mono | 12px | 400 | `--acc` | Background `--code`, 4px radius |
+| Code (block) | mono | 13px | 400 | `--text` | Background `--code`, 6px radius |
+| Badge labels | mono | 9px | 500 | varies | Uppercase, letter-spacing .08em, pill |
+| Breadcrumb | sans | 12px | 400 | `--dim` | — |
+| Sidebar link | sans | 13px | 400/500 | `--dim`/`--acc` | 500 + accent bar when active |
+| Sidebar section label | JetBrains Mono | 10px | 500 | `--faint` | Uppercase, letter-spacing .16em |
+
+Headings use **Lora serif** to match the homepage; section headings and all
+code/labels use **JetBrains Mono**.
 
 ---
 
@@ -92,32 +122,35 @@ font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
 
 | Context | Value |
 |---------|-------|
-| Top bar height | 48px |
-| Sidebar width | 240px |
-| Main content padding | 36px vertical, 48px horizontal |
-| Card padding | 16-24px |
-| Border radius (small) | 4-5px |
-| Border radius (medium) | 6-8px |
+| Top bar height | 60px |
+| Sidebar width | 248px |
+| Main content padding | 40px vertical, 52px horizontal (max-width 900px) |
+| Card padding | 16–24px |
+| Border radius (small) | 4–6px |
+| Border radius (medium) | 6–8px |
+| Border radius (pill) | 100px (badges, chips) |
 | Border radius (large) | 12px (modals) |
 | Item gap (between cards) | 12px |
-| Section margin (h2) | 32px top, 12px bottom |
+| Section margin (h2) | 38px top, 14px bottom |
 
 ---
 
 ## Components
 
 ### Top Bar
-- Sticky, 48px tall, `--sb` background, bottom border
-- Left: brand logo + name (14px, 700 weight, `--bright`)
-- Right: search trigger button + theme toggle button
-- Search trigger: `--card` background, `--bdr` border, kbd shortcut label
+- Sticky, **60px** tall, translucent `--bg-nav` with `backdrop-filter: blur(14px)`, bottom border
+- Left: brand logo + name in **Lora serif** (18px, 600, `--text`)
+- Right: search trigger button + theme toggle (mono)
+- Search trigger: `--card` background, `--bdr` border, `⌘K` kbd shortcut
 
 ### Sidebar
-- 240px wide, sticky below top bar, independent scroll
-- Section headings: 10px uppercase labels
-- Links: 13px, `--dim` default, `--acc` on hover/active
-- Collapsible groups: chevron (&#9656;) rotates 90deg when open
-- Sub-items: 12px, indented 16px, with colored kind indicators (T/I/F)
+- 248px wide, sticky below the top bar, independent scroll
+- Section label: 10px **mono** uppercase, `--faint`, letter-spacing .16em
+- Links: 13px, `--dim` default, `--text` on hover (accent-tinted background)
+- **Active item:** `--acc` text + inset 2px accent left-bar + faint accent background
+  (full-row for module groups via `:has(.sl.active)`)
+- Collapsible groups: chevron (`▸`) rotates 90° and turns accent when open
+- Sub-items: 12px, indented under a 1px `--bdr` **guide rail**, with mono kind markers (T/I/F)
 
 ### Cards
 - `--card` background, 1px `--bdr` border, 8px radius
@@ -125,38 +158,36 @@ font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
 - Module cards (index): lift on hover (`translateY(-1px)`)
 
 ### Item Rows (fn/type/interface)
-- Header row (`.ih`): badge + name + signature + source link + anchor link
+- Header row (`.ih`): pill badge + name + signature + source link + anchor link
 - Clickable to expand/collapse body
-- Hover: background tints toward accent (`color-mix(in srgb, var(--card) 80%, var(--acc) 20%)`)
-- Source link and anchor link: hidden by default, appear on hover (opacity transition)
+- Hover: background tints toward accent
+- Source/anchor links: hidden by default, appear on hover
 
 ### Search Modal
 - Fixed overlay with 60% black backdrop
 - Modal: `--sb` background, 12px radius, 560px wide, heavy box-shadow
-- Input: transparent background, bottom border, 15px font
-- Results: badge + name + module, with doc snippet below
+- Input: transparent, bottom border, 15px
+- Results: pill kind badge + name + module, with doc snippet below
 
 ### Admonitions
 - Left border accent (3px), `--card` background, 6px radius on right
-- Note: `--acc2` (blue) border
-- Warning: `--ty` (amber) border
+- Note: `--acc2` (cyan) border · Warning: `--ty` (amber) border
 
 ### Code Blocks
-- Always dark background (`--code`), even in light theme
-- Copy button: absolute positioned top-right, appears on hover
-- "Copied!" feedback with `--fn` color
+- Follow theme tokens (`--code`): dark in dark mode, light in light mode (like the homepage)
+- Copy button: absolute top-right, appears on hover; "Copied!" feedback in `--fn`
 
 ---
 
 ## Transitions
 
-All interactive transitions use 100-150ms:
+Interactive transitions use 100–150ms:
 
 ```css
-transition: all .15s;      /* buttons, borders */
-transition: all .1s;       /* sidebar links, item headers */
-transition: opacity .15s;  /* reveal elements (source links, anchors) */
-transition: transform .15s; /* chevron rotation */
+transition: all .15s;                     /* buttons, borders */
+transition: color .12s, background .12s;  /* sidebar links, item headers */
+transition: opacity .15s;                 /* reveal elements (source links, anchors) */
+transition: transform .15s;               /* chevron rotation */
 ```
 
 ---
@@ -166,7 +197,7 @@ transition: transform .15s; /* chevron rotation */
 | Breakpoint | Behavior |
 |------------|----------|
 | > 768px | Full layout: sidebar + main content |
-| <= 768px | Sidebar hidden, main content fills width, reduced padding (24px 16px) |
+| ≤ 768px | Sidebar hidden, main fills width, reduced padding (24px 16px) |
 
 ---
 
@@ -194,39 +225,43 @@ Icons: moon (dark mode active), sun (light mode active).
 ## CSS Custom Properties (copy-paste)
 
 ```css
-/* Dark theme */
+/* Dark theme (default) */
 :root {
-  --bg: #09090b;
-  --sb: #0f0f12;
-  --card: #141418;
-  --bdr: #23252b;
-  --code: #0c0c0f;
-  --text: #d4d4d8;
-  --dim: #71717a;
-  --bright: #fafafa;
-  --acc: #6FE3D6;
-  --acc2: #3ABFF8;
-  --fn: #36D399;
-  --ty: #FBBF24;
-  --if: #3ABFF8;
-  --prv: #3f3f46;
+  --bg: #07101a;
+  --sb: #0a1622;
+  --bg-nav: rgba(7,16,26,0.92);
+  --card: #0c1928;
+  --bdr: #0f2438;
+  --code: #0c1928;
+  --text: #cce5f5;
+  --dim: #4a7898;
+  --faint: #1e4060;
+  --bright: #eaf4fb;
+  --acc: oklch(63% 0.12 207);
+  --acc2: oklch(74% 0.11 200);
+  --fn: oklch(74% 0.13 165);
+  --ty: oklch(82% 0.12 70);
+  --if: oklch(78% 0.11 235);
+  --prv: #3a5f7d;
 }
 
 /* Light theme */
 [data-theme="light"] {
-  --bg: #ffffff;
-  --sb: #f4f9fb;
-  --card: #ffffff;
-  --bdr: #d0e3eb;
-  --code: #0F2A36;
-  --text: #0B1F2A;
-  --dim: #4a6d7a;
-  --bright: #0B1F2A;
-  --acc: #0d9e8f;
-  --acc2: #0284c7;
-  --fn: #047857;
-  --ty: #b45309;
-  --if: #0284c7;
-  --prv: #8b9da7;
+  --bg: #f0f6fc;
+  --sb: #e3eef8;
+  --bg-nav: rgba(240,246,252,0.92);
+  --card: #ddeaf5;
+  --bdr: #b5cce0;
+  --code: #ddeaf5;
+  --text: #071828;
+  --dim: #2e5c7c;
+  --faint: #6a96b5;
+  --bright: #071828;
+  --acc: oklch(37% 0.11 210);
+  --acc2: oklch(45% 0.11 215);
+  --fn: oklch(45% 0.13 165);
+  --ty: oklch(52% 0.12 70);
+  --if: oklch(45% 0.11 235);
+  --prv: #6a96b5;
 }
 ```
