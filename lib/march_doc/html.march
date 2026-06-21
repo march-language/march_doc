@@ -374,7 +374,7 @@ fn sidebar_nav(modules : List(ModuleInfo)) : String do
         _ -> ""
         end
       )
-      let pub_fns = List.filter(fns, Parser.is_pub)
+      let pub_fns = sort_fns(List.filter(fns, Parser.is_pub))
       let fn_items = List.map(pub_fns, fn e ->
         match e do
         FnEntry(name, _, _, _, _) ->
@@ -491,6 +491,15 @@ end
 
 -- ── Module page ──────────────────────────────────────────────────────────────
 
+-- Sort function entries alphabetically by name.
+fn sort_fns(fns) do
+  List.sort_by(fns, fn (a, b) ->
+    match a do FnEntry(na, _, _, _, _) ->
+      match b do FnEntry(nb, _, _, _, _) -> na < nb end
+    end
+  )
+end
+
 fn render_module(info : ModuleInfo, sidebar : String, registry : List(TypeRef), src_pattern : Option(String)) : String do
   match info do
   ModuleInfo(mod_name, comment_opt, fns, types, ifaces, file_path) ->
@@ -503,8 +512,8 @@ fn render_module(info : ModuleInfo, sidebar : String, registry : List(TypeRef), 
     let ifaces_html =
       if List.is_empty(ifaces) do ""
       else "<h2>Interfaces</h2>" ++ String.join(List.map(ifaces, fn e -> render_iface(e, registry, mod_name, src_pattern, file_path)), "\n") end
-    let pub_fns = List.filter(fns, Parser.is_pub)
-    let prv_fns = List.filter(fns, Parser.is_prv)
+    let pub_fns = sort_fns(List.filter(fns, Parser.is_pub))
+    let prv_fns = sort_fns(List.filter(fns, Parser.is_prv))
     let pub_html =
       if List.is_empty(pub_fns) do ""
       else "<h2>Functions</h2>" ++ String.join(List.map(pub_fns, fn e -> render_fn(e, registry, mod_name, src_pattern, file_path)), "\n") end
