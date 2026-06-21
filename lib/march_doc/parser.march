@@ -193,16 +193,56 @@ fn decl_name(decl) do
   go(0, String.byte_size(decl))
 end
 
--- Only declarations at column 0 are module-level (not nested helpers).
-fn is_toplevel(line) do
-  if String.is_empty(line) do false
-  else
-    let ch = String.slice(line, 0, 1)
-    ch != " " && ch != "\t"
+-- Count the leading whitespace (spaces/tabs) of a line.
+fn indent_width(line) do
+  fn go(i, n) do
+    if i >= n do n
+    else
+      let ch = String.slice(line, i, 1)
+      if ch == " " || ch == "\t" do go(i + 1, n) else i end
+    end
   end
+  go(0, String.byte_size(line))
 end
 
-fn process_line(line, pending, fns, types, ifaces, include_private, line_num) do
+-- Does a trimmed line begin a declaration (fn/pfn/type/ptype/interface)?
+fn is_decl_kw(t) do
+  String.starts_with(t, "fn ") || String.starts_with(t, "pfn ")
+    || String.starts_with(t, "type ") || String.starts_with(t, "ptype ")
+    || String.starts_with(t, "interface ")
+end
+
+-- Module-level declarations share the shallowest indentation in the file
+-- (column 0 in some modules, one indent level inside `mod ... do` in others
+-- such as the stdlib). Nested helper functions are always deeper. Find that
+-- shallowest indent so we can tell them apart, skipping triple-quoted doc
+-- blocks (which may contain code examples that look like declarations).
+fn module_indent(lines) do
+  fn go(ls, in_doc, best) do
+    match ls do
+    Nil -> match best do None -> 0 | Some(b) -> b end
+    Cons(line, rest) ->
+      do
+        let t = String.trim(line)
+        if in_doc do
+          if String.contains(t, "\"\"\"") do go(rest, false, best) else go(rest, true, best) end
+        else
+          if String.starts_with(t, "doc \"\"\"") do go(rest, true, best)
+          else
+            if is_decl_kw(t) do
+              let w = indent_width(line)
+              let best2 = match best do None -> Some(w) | Some(b) -> if w < b do Some(w) else Some(b) end end
+              go(rest, false, best2)
+            else go(rest, false, best) end
+          end
+        end
+      end
+    end
+  end
+  go(lines, false, None)
+end
+
+fn process_line(line, pending, fns, types, ifaces, include_private, line_num, mod_indent) do
   let t = String.trim(line)
   if String.is_empty(t) do (pending, fns, types, ifaces, Nil)
   else
@@ -212,12 +252,12 @@ fn process_line(line, pending, fns, types, ifaces, include_private, line_num) do
         let doc_text = extract_single_doc(t)
         (Some(doc_text), fns, types, ifaces, Nil)
       else
-        if String.starts_with(t, "fn ") && is_toplevel(line) do
+        if String.starts_with(t, "fn ") && indent_width(line) == mod_indent do
           let dsig = extract_sig(line)
           let name = decl_name(dsig)
           (None, Cons(FnEntry(name, dsig, pending, false, line_num), fns), types, ifaces, Nil)
         else
-          if String.starts_with(t, "pfn ") && include_private && is_toplevel(line) do
+          if String.starts_with(t, "pfn ") && include_private && indent_width(line) == mod_indent do
             let dsig = extract_sig(line)
             let name = decl_name(dsig)
             (None, Cons(FnEntry(name, dsig, pending, true, line_num), fns), types, ifaces, Nil)
@@ -249,7 +289,7 @@ fn process_line(line, pending, fns, types, ifaces, include_private, line_num) do
 end
 
 -- Walk lines extracting doc + fn/type/interface entries.
-fn parse_entries(lines, include_private) do
+fn parse_entries(lines, include_private, mod_indent) do
   fn go(ls, pending, fns, types, ifaces, line_num) do
     match ls do
     Nil ->
@@ -263,7 +303,7 @@ fn parse_entries(lines, include_private) do
           go(rest2, Some(doc_text), fns, types, ifaces, line_num + skip)
         else
           let (pending2, fns2, types2, ifaces2, _) =
-            process_line(line, pending, fns, types, ifaces, include_private, line_num)
+            process_line(line, pending, fns, types, ifaces, include_private, line_num, mod_indent)
           go(rest, pending2, fns2, types2, ifaces2, line_num + 1)
         end
       end
@@ -281,7 +321,7 @@ fn parse_file(path : String, include_private : Bool) : Option(ModuleInfo) do
       let lines = String.split(src, "\n")
       let mod_name = parse_module_name(lines)
       let mod_comment = parse_module_comment(lines)
-      let (fns, types, ifaces) = parse_entries(lines, include_private)
+      let (fns, types, ifaces) = parse_entries(lines, include_private, module_indent(lines))
       if mod_name == "Unknown" && List.is_empty(fns) && List.is_empty(types) do
         None
       else
