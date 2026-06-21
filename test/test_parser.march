@@ -655,6 +655,22 @@ describe "Parser" do
       end
     end
 
+    test "extracts module-level functions in an indented module body (stdlib style)" do
+      -- The stdlib indents declarations one level inside `mod ... do`.
+      -- Module-level fns (indent 2) must be captured; nested helpers (indent 4) must not.
+      let src = "mod Indented do\n  fn encode(data) do\n    fn go(x) do x end\n    go(data)\n  end\n  fn decode(s) do s end\nend"
+      match parse_src("indented", src, false) do
+        None -> assert false
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
+          let names = List.map(fns, fn e -> match e do FnEntry(n, _, _, _, _) -> n end)
+          assert (List.length(fns) == 2)
+          assert (List.any(names, fn n -> n == "encode"))
+          assert (List.any(names, fn n -> n == "decode"))
+          assert (!List.any(names, fn n -> n == "go"))
+        end
+      end
+    end
+
     test "None for non-existent file" do
       match Parser.parse_file("/tmp/march_doc_no_such_file_ever.march", false) do
         None -> assert true
