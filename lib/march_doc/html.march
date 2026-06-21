@@ -5,15 +5,17 @@ mod Html do
 -- ── CSS ──────────────────────────────────────────────────────────────────────
 
 fn page_css() : String do
-  -- Dark theme (default) — near-black with March brand accents
-  ":root{--bg:#09090b;--sb:#0f0f12;--card:#141418;--bdr:#23252b;--acc:#6FE3D6;" ++
-  "--acc2:#3ABFF8;--text:#d4d4d8;--dim:#71717a;--bright:#fafafa;--code:#0c0c0f;" ++
-  "--fn:#36D399;--ty:#FBBF24;--if:#3ABFF8;--prv:#3f3f46}" ++
+  -- Dark theme (default) — deep navy with cyan accent, matching the March homepage
+  ":root{--bg:#07101a;--sb:#0a1622;--bg-nav:rgba(7,16,26,.92);--card:#0c1928;--bdr:#0f2438;" ++
+  "--acc:oklch(63% .12 207);--acc2:oklch(74% .11 200);--text:#cce5f5;--dim:#4a7898;" ++
+  "--faint:#1e4060;--bright:#eaf4fb;--code:#0c1928;" ++
+  "--fn:oklch(74% .13 165);--ty:oklch(82% .12 70);--if:oklch(78% .11 235);--prv:#3a5f7d}" ++
 
   -- Light theme overrides
-  "[data-theme='light']{--bg:#ffffff;--sb:#f4f9fb;--card:#ffffff;--bdr:#d0e3eb;--acc:#0d9e8f;" ++
-  "--acc2:#0284c7;--text:#0B1F2A;--dim:#4a6d7a;--bright:#0B1F2A;--code:#0F2A36;" ++
-  "--fn:#047857;--ty:#b45309;--if:#0284c7;--prv:#8b9da7}" ++
+  "[data-theme='light']{--bg:#f0f6fc;--sb:#e3eef8;--bg-nav:rgba(240,246,252,.92);--card:#ddeaf5;--bdr:#b5cce0;" ++
+  "--acc:oklch(37% .11 210);--acc2:oklch(45% .11 215);--text:#071828;--dim:#2e5c7c;" ++
+  "--faint:#6a96b5;--bright:#071828;--code:#ddeaf5;" ++
+  "--fn:oklch(45% .13 165);--ty:oklch(52% .12 70);--if:oklch(45% .11 235);--prv:#6a96b5}" ++
 
   -- Reset + base
   "*{box-sizing:border-box;margin:0;padding:0}" ++
@@ -21,11 +23,11 @@ fn page_css() : String do
   "a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline;color:var(--acc2)}" ++
 
   -- Top bar
-  "#topbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:48px;background:var(--sb);border-bottom:1px solid var(--bdr);flex-shrink:0;position:sticky;top:0;z-index:100}" ++
-  "#topbar .brand{font-size:14px;font-weight:700;color:var(--bright);letter-spacing:.04em;display:flex;align-items:center;gap:8px}" ++
+  "#topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:60px;background:var(--bg-nav);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--bdr);flex-shrink:0;position:sticky;top:0;z-index:100}" ++
+  "#topbar .brand{font-family:'Lora',Georgia,serif;font-size:18px;font-weight:600;color:var(--text);letter-spacing:-.02em;display:flex;align-items:center;gap:9px}" ++
   "#topbar .brand svg{width:20px;height:20px}" ++
   "#topbar .actions{display:flex;align-items:center;gap:12px}" ++
-  "#theme-toggle{background:none;border:1px solid var(--bdr);border-radius:6px;color:var(--dim);cursor:pointer;padding:5px 8px;font-size:13px;display:flex;align-items:center;gap:4px;transition:all .15s}" ++
+  "#theme-toggle{background:none;border:1px solid var(--bdr);border-radius:6px;color:var(--dim);cursor:pointer;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:4px;transition:all .15s}" ++
   "#theme-toggle:hover{color:var(--text);border-color:var(--acc)}" ++
   "#search-trigger{background:var(--card);border:1px solid var(--bdr);border-radius:6px;color:var(--dim);cursor:pointer;padding:5px 14px;font-size:13px;display:flex;align-items:center;gap:8px;transition:all .15s;min-width:200px}" ++
   "#search-trigger:hover{border-color:var(--acc);color:var(--text)}" ++
@@ -38,34 +40,39 @@ fn page_css() : String do
   "code,pre{font-family:'JetBrains Mono','Fira Code','SF Mono',monospace;font-size:13px}" ++
   "pre{background:var(--code);border:1px solid var(--bdr);border-radius:6px;padding:14px 18px;overflow-x:auto;margin:12px 0;line-height:1.5}" ++
   "code{background:var(--code);padding:2px 6px;border-radius:4px;font-size:12px;color:var(--acc)}pre code{background:none;padding:0;color:var(--text);font-size:13px}" ++
-  "h1{font-size:1.6rem;color:var(--bright);margin-bottom:10px;font-weight:700}" ++
-  "h2{font-size:1.05rem;color:var(--bright);margin:32px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--bdr);font-weight:600;text-transform:uppercase;letter-spacing:.04em;font-size:.85rem}" ++
+  "h1{font-family:'Lora',Georgia,serif;font-size:2.1rem;color:var(--bright);margin-bottom:12px;font-weight:600;letter-spacing:-.02em}" ++
+  "h2{font-family:'JetBrains Mono','Fira Code',monospace;font-size:.72rem;color:var(--acc);margin:38px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--bdr);font-weight:500;text-transform:uppercase;letter-spacing:.12em}" ++
   "p{margin:8px 0}" ++
 
   -- Sidebar
-  "#sb{width:240px;min-width:200px;background:var(--sb);border-right:1px solid var(--bdr);padding:20px 0;position:sticky;top:48px;height:calc(100vh - 48px);overflow-y:auto;flex-shrink:0}" ++
-  "#sb::-webkit-scrollbar{width:4px}#sb::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}" ++
-  ".sb-section{padding:0 14px;margin-bottom:6px}" ++
-  ".sb-heading{font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;padding:10px 0 6px;user-select:none}" ++
-  ".sl{display:block;padding:4px 10px;border-radius:5px;font-size:13px;color:var(--dim);transition:all .1s}" ++
-  ".sl:hover{background:var(--card);color:var(--acc);text-decoration:none}" ++
-  ".sl.active{background:var(--card);color:var(--acc);font-weight:500}" ++
+  "#sb{width:248px;min-width:208px;background:var(--sb);border-right:1px solid var(--bdr);padding:8px 10px 28px;position:sticky;top:60px;height:calc(100vh - 60px);overflow-y:auto;flex-shrink:0}" ++
+  "#sb::-webkit-scrollbar{width:5px}#sb::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:3px}#sb::-webkit-scrollbar-thumb:hover{background:var(--dim)}" ++
+  ".sb-section{padding:0}" ++
+  ".sb-heading{font-family:'JetBrains Mono','Fira Code',monospace;font-size:10px;font-weight:500;color:var(--faint);text-transform:uppercase;letter-spacing:.16em;padding:20px 10px 8px;user-select:none}" ++
+
+  -- Generic nav link (top-level + sub-items)
+  ".sl{display:block;padding:5px 10px;border-radius:6px;font-size:13px;line-height:1.45;color:var(--dim);transition:color .12s,background .12s}" ++
+  ".sl:hover{background:color-mix(in oklab,var(--acc) 9%,transparent);color:var(--text);text-decoration:none}" ++
+  ".sl.active{color:var(--acc);font-weight:500}" ++
+  ".sb-section>.sl.active,.sb-sub .sl.active{background:color-mix(in oklab,var(--acc) 12%,transparent);box-shadow:inset 2px 0 0 var(--acc)}" ++
 
   -- Hierarchical sidebar groups
-  ".sb-group{margin-bottom:2px}" ++
-  ".sb-group-hdr{display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:5px;font-size:13px;color:var(--dim);cursor:pointer;user-select:none;transition:all .1s}" ++
-  ".sb-group-hdr:hover{background:var(--card);color:var(--acc)}" ++
-  ".sb-group-hdr.active{color:var(--acc);font-weight:500}" ++
-  ".sb-chevron{font-size:9px;transition:transform .15s;width:12px;flex-shrink:0;text-align:center;color:var(--dim)}" ++
-  ".sb-group.open .sb-chevron{transform:rotate(90deg)}" ++
-  ".sb-sub{display:none;padding-left:16px}" ++
+  ".sb-group{margin:1px 0}" ++
+  ".sb-group-hdr{display:flex;align-items:center;border-radius:6px;cursor:pointer;user-select:none;transition:background .12s}" ++
+  ".sb-group-hdr:hover{background:color-mix(in oklab,var(--acc) 9%,transparent)}" ++
+  ".sb-group-hdr:hover .sl,.sb-group-hdr:hover .sb-chevron{color:var(--text)}" ++
+  ".sb-group-hdr:has(.sl.active){background:color-mix(in oklab,var(--acc) 12%,transparent);box-shadow:inset 2px 0 0 var(--acc)}" ++
+  ".sb-group-hdr .sl{flex:1;padding-left:1px}" ++
+  ".sb-chevron{font-size:9px;transition:transform .15s,color .12s;width:20px;align-self:stretch;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--faint)}" ++
+  ".sb-group.open>.sb-group-hdr .sb-chevron{transform:rotate(90deg);color:var(--acc)}" ++
+  ".sb-sub{display:none;margin:1px 0 6px 19px;padding-left:8px;border-left:1px solid var(--bdr)}" ++
   ".sb-group.open .sb-sub{display:block}" ++
-  ".sb-sub .sl{font-size:12px;padding:2px 8px;color:var(--dim);opacity:.8}" ++
-  ".sb-sub .sl:hover{opacity:1}" ++
-  ".sb-sub .sb-kind{font-size:8px;font-weight:700;letter-spacing:.05em;margin-right:4px;text-transform:uppercase;opacity:.6}" ++
+  ".sb-sub .sl{font-size:12px;padding:3px 8px;color:var(--dim)}" ++
+  ".sb-sub .sl:hover{color:var(--text)}" ++
+  ".sb-kind{display:inline-block;width:12px;font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;letter-spacing:.03em;margin-right:8px;text-transform:uppercase;text-align:center}" ++
 
   -- Main content
-  "#main{flex:1;padding:36px 48px;max-width:880px;min-width:0;overflow-y:auto;height:calc(100vh - 48px)}" ++
+  "#main{flex:1;padding:40px 52px;max-width:900px;min-width:0;overflow-y:auto;height:calc(100vh - 60px)}" ++
 
   -- Breadcrumb
   ".breadcrumb{font-size:12px;color:var(--dim);margin-bottom:16px;display:flex;align-items:center;gap:6px}" ++
@@ -82,12 +89,12 @@ fn page_css() : String do
   ".ih:hover{background:color-mix(in srgb,var(--card) 80%,var(--acc) 20%)}" ++
 
   -- Badges
-  ".badge{font-size:9px;font-weight:700;letter-spacing:.08em;padding:2px 7px;border-radius:4px;text-transform:uppercase;flex-shrink:0}" ++
-  ".bfn{background:rgba(54,211,153,.12);color:var(--fn)}" ++
-  ".bpfn{background:rgba(61,96,112,.2);color:var(--prv)}" ++
-  ".bty{background:rgba(251,191,36,.1);color:var(--ty)}" ++
-  ".bpt{background:rgba(61,96,112,.15);color:var(--prv)}" ++
-  ".bif{background:rgba(58,191,248,.1);color:var(--if)}" ++
+  ".badge{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500;letter-spacing:.08em;padding:2px 9px;border-radius:100px;text-transform:uppercase;flex-shrink:0;border:1px solid transparent}" ++
+  ".bfn{background:color-mix(in oklab,var(--fn) 13%,transparent);color:var(--fn);border-color:color-mix(in oklab,var(--fn) 24%,transparent)}" ++
+  ".bpfn{background:color-mix(in oklab,var(--prv) 18%,transparent);color:var(--prv);border-color:color-mix(in oklab,var(--prv) 30%,transparent)}" ++
+  ".bty{background:color-mix(in oklab,var(--ty) 12%,transparent);color:var(--ty);border-color:color-mix(in oklab,var(--ty) 24%,transparent)}" ++
+  ".bpt{background:color-mix(in oklab,var(--prv) 15%,transparent);color:var(--prv);border-color:color-mix(in oklab,var(--prv) 26%,transparent)}" ++
+  ".bif{background:color-mix(in oklab,var(--if) 12%,transparent);color:var(--if);border-color:color-mix(in oklab,var(--if) 24%,transparent)}" ++
 
   -- Item content
   ".name{font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;color:var(--bright);font-weight:600}" ++
@@ -104,7 +111,7 @@ fn page_css() : String do
   -- Module cards (index page)
   ".mc{border:1px solid var(--bdr);border-radius:8px;padding:16px 20px;margin-bottom:12px;background:var(--card);transition:all .15s}" ++
   ".mc:hover{border-color:var(--acc);transform:translateY(-1px)}" ++
-  ".mc h3{color:var(--acc);font-size:.95rem;font-weight:600}" ++
+  ".mc h3{font-family:'Lora',Georgia,serif;color:var(--acc);font-size:1.05rem;font-weight:600;letter-spacing:-.01em}" ++
   ".mc p{font-size:13px;color:var(--dim);margin-top:6px}" ++
   ".st{font-size:12px;color:var(--dim);margin-top:8px;display:flex;gap:16px}" ++
   ".st span{display:flex;align-items:center;gap:4px}" ++
@@ -127,9 +134,9 @@ fn page_css() : String do
   ".sr-item{display:flex;align-items:baseline;gap:8px;padding:8px 12px;border-radius:6px;cursor:pointer;text-decoration:none;color:var(--text);font-size:13px;transition:background .1s}" ++
   ".sr-item:hover{background:var(--card);text-decoration:none}" ++
   ".sr-kind{font-size:9px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:4px;text-transform:uppercase;flex-shrink:0;min-width:32px;text-align:center}" ++
-  ".sr-fn{background:rgba(54,211,153,.12);color:var(--fn)}.sr-type{background:rgba(251,191,36,.1);color:var(--ty)}" ++
-  ".sr-interface{background:rgba(58,191,248,.1);color:var(--if)}.sr-module{background:rgba(111,227,214,.1);color:var(--acc)}" ++
-  ".sr-pfn{background:rgba(61,96,112,.2);color:var(--prv)}.sr-ptype{background:rgba(61,96,112,.15);color:var(--prv)}" ++
+  ".sr-fn{background:color-mix(in oklab,var(--fn) 13%,transparent);color:var(--fn)}.sr-type{background:color-mix(in oklab,var(--ty) 12%,transparent);color:var(--ty)}" ++
+  ".sr-interface{background:color-mix(in oklab,var(--if) 12%,transparent);color:var(--if)}.sr-module{background:color-mix(in oklab,var(--acc) 13%,transparent);color:var(--acc)}" ++
+  ".sr-pfn{background:color-mix(in oklab,var(--prv) 18%,transparent);color:var(--prv)}.sr-ptype{background:color-mix(in oklab,var(--prv) 15%,transparent);color:var(--prv)}" ++
   ".sr-name{color:var(--bright);font-family:monospace;font-weight:600;white-space:nowrap}" ++
   ".sr-mod{color:var(--dim);font-size:11px;margin-left:auto;flex-shrink:0}" ++
   ".sr-doc{color:var(--dim);font-size:11px;padding:0 12px 6px 48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" ++
@@ -145,13 +152,10 @@ fn page_css() : String do
 
   -- Guide body
   ".guide-body{line-height:1.8;font-size:15px}" ++
-  ".guide-body h3{font-size:1.2rem;margin:28px 0 12px;color:var(--bright)}" ++
-  ".guide-body h4{font-size:1rem;margin:24px 0 10px;color:var(--bright)}" ++
+  ".guide-body h3{font-family:'Lora',Georgia,serif;font-size:1.4rem;margin:30px 0 12px;color:var(--bright);font-weight:600;letter-spacing:-.01em}" ++
+  ".guide-body h4{font-family:'Lora',Georgia,serif;font-size:1.1rem;margin:24px 0 10px;color:var(--bright);font-weight:600}" ++
 
-  -- Light mode code blocks stay dark
-  "[data-theme='light'] pre{background:#0F2A36;border-color:#133847}" ++
-  "[data-theme='light'] pre code{color:#D6EEF5}" ++
-  "[data-theme='light'] .copy-btn{background:#132F3D;color:#a8ccd8;border-color:#133847}" ++
+  -- Code blocks follow theme tokens (light code surface in light mode, like the main page)
 
   -- Responsive
   "@media(max-width:768px){#sb{display:none}#main{padding:24px 16px}#search-trigger{min-width:auto}}"
@@ -299,6 +303,9 @@ fn page(title : String, sidebar : String, is_index : Bool, content : String) : S
   "<!DOCTYPE html><html lang=\"en\" data-theme=\"dark\"><head><meta charset=\"UTF-8\">" ++
   "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" ++
   "<title>" ++ Markdown.html_escape(title) ++ " — March Docs</title>" ++
+  "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">" ++
+  "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>" ++
+  "<link href=\"https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,400;1,600&family=JetBrains+Mono:wght@400;500&display=swap\" rel=\"stylesheet\">" ++
   "<style>" ++ page_css() ++ "</style></head><body>" ++
 
   -- Top bar
@@ -307,7 +314,7 @@ fn page(title : String, sidebar : String, is_index : Bool, content : String) : S
   "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5\"/></svg>" ++
   " March Docs</div>" ++
   "<div class=\"actions\">" ++
-  "<button id=\"search-trigger\" onclick=\"openSearch()\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.35-4.35\"/></svg> Search&hellip;<kbd>&amp;#8984;K</kbd></button>" ++
+  "<button id=\"search-trigger\" onclick=\"openSearch()\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.35-4.35\"/></svg> Search&hellip;<kbd>&#8984;K</kbd></button>" ++
   "<button id=\"theme-toggle\" onclick=\"toggleTheme()\">" ++
   "<svg id=\"icon-moon\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z\"/></svg>" ++
   "<svg id=\"icon-sun\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" style=\"display:none\"><circle cx=\"12\" cy=\"12\" r=\"5\"/><path d=\"M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42\"/></svg>" ++
