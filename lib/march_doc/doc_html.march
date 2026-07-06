@@ -1,6 +1,6 @@
--- Html — render parsed modules into HTML pages.
+-- DocHtml — render parsed modules into HTML pages.
 
-mod Html do
+mod DocHtml do
 
 -- ── CSS ──────────────────────────────────────────────────────────────────────
 
@@ -500,26 +500,59 @@ fn sort_fns(fns) do
   )
 end
 
+-- Explicit loops to render entry lists without capturing registry in a closure.
+-- List.map with a capturing lambda causes FBIP to free registry after the first
+-- iteration; passing registry as an explicit pfn parameter avoids this.
+pfn render_type_entries_go(entries, registry, mod_name, src_pattern, file_path, acc) do
+  match entries do
+  Nil -> List.reverse(acc)
+  Cons(e, rest) ->
+    let s = render_type(e, registry, mod_name, src_pattern, file_path)
+    render_type_entries_go(rest, registry, mod_name, src_pattern, file_path, Cons(s, acc))
+  end
+end
+
+pfn render_iface_entries_go(entries, registry, mod_name, src_pattern, file_path, acc) do
+  match entries do
+  Nil -> List.reverse(acc)
+  Cons(e, rest) ->
+    let s = render_iface(e, registry, mod_name, src_pattern, file_path)
+    render_iface_entries_go(rest, registry, mod_name, src_pattern, file_path, Cons(s, acc))
+  end
+end
+
+pfn render_fn_entries_go(entries, registry, mod_name, src_pattern, file_path, acc) do
+  match entries do
+  Nil -> List.reverse(acc)
+  Cons(e, rest) ->
+    let s = render_fn(e, registry, mod_name, src_pattern, file_path)
+    render_fn_entries_go(rest, registry, mod_name, src_pattern, file_path, Cons(s, acc))
+  end
+end
+
 fn render_module(info : ModuleInfo, sidebar : String, registry : List(TypeRef), src_pattern : Option(String)) : String do
   match info do
   ModuleInfo(mod_name, comment_opt, fns, types, ifaces, file_path) ->
     let breadcrumb = "<nav class=\"breadcrumb\"><a href=\"index.html\">March Docs</a><span class=\"sep\">&rsaquo;</span><span>" ++ Markdown.html_escape(mod_name) ++ "</span></nav>"
     let title_html = breadcrumb ++ "<h1>" ++ Markdown.html_escape(mod_name) ++ "</h1>"
     let comment_html = render_comment_html(comment_opt)
-    let types_html =
-      if List.is_empty(types) do ""
-      else "<h2>Types</h2>" ++ String.join(List.map(types, fn e -> render_type(e, registry, mod_name, src_pattern, file_path)), "\n") end
-    let ifaces_html =
-      if List.is_empty(ifaces) do ""
-      else "<h2>Interfaces</h2>" ++ String.join(List.map(ifaces, fn e -> render_iface(e, registry, mod_name, src_pattern, file_path)), "\n") end
+    -- Unconditional pfn calls so Perceus sees a linear sequence of consuming
+    -- uses of `registry` and inserts the correct inc_rcs between them.
+    -- (Conditional uses inside if-else branches confuse Perceus RC equalization.)
+    let type_items = render_type_entries_go(types, registry, mod_name, src_pattern, file_path, Nil)
+    let iface_items = render_iface_entries_go(ifaces, registry, mod_name, src_pattern, file_path, Nil)
     let pub_fns = sort_fns(List.filter(fns, Parser.is_pub))
     let prv_fns = sort_fns(List.filter(fns, Parser.is_prv))
-    let pub_html =
-      if List.is_empty(pub_fns) do ""
-      else "<h2>Functions</h2>" ++ String.join(List.map(pub_fns, fn e -> render_fn(e, registry, mod_name, src_pattern, file_path)), "\n") end
-    let prv_html =
-      if List.is_empty(prv_fns) do ""
-      else "<h2>Private</h2>" ++ String.join(List.map(prv_fns, fn e -> render_fn(e, registry, mod_name, src_pattern, file_path)), "\n") end
+    let fn_items = render_fn_entries_go(pub_fns, registry, mod_name, src_pattern, file_path, Nil)
+    let prv_items = render_fn_entries_go(prv_fns, registry, mod_name, src_pattern, file_path, Nil)
+    let types_html = if List.is_empty(type_items) do ""
+      else "<h2>Types</h2>" ++ String.join(type_items, "\n") end
+    let ifaces_html = if List.is_empty(iface_items) do ""
+      else "<h2>Interfaces</h2>" ++ String.join(iface_items, "\n") end
+    let pub_html = if List.is_empty(fn_items) do ""
+      else "<h2>Functions</h2>" ++ String.join(fn_items, "\n") end
+    let prv_html = if List.is_empty(prv_items) do ""
+      else "<h2>Private</h2>" ++ String.join(prv_items, "\n") end
     let content = title_html ++ comment_html ++ types_html ++ ifaces_html ++ pub_html ++ prv_html
     page(mod_name, sidebar, false, content)
   _ -> ""

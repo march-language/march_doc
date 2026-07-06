@@ -2,6 +2,8 @@
 
 mod Guides do
 
+  import DocHtml
+
 -- Uppercase a single ASCII lowercase letter a-z; leaves other chars unchanged.
 pfn ascii_upper(ch) do
   if ch == "a" do "A"
@@ -143,7 +145,7 @@ fn render_guide(guides_dir : String, filename : String, sidebar : String) : (Str
       "<h1>" ++ Markdown.html_escape(name) ++ "</h1>" ++
       "<div class=\"guide-body\">" ++ Markdown.md_to_html(md) ++ "</div>"
   end
-  let html = Html.page(name, sidebar, false, content)
+  let html = DocHtml.page(name, sidebar, false, content)
   (out_name, html)
 end
 

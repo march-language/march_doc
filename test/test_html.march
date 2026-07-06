@@ -7,35 +7,35 @@ describe "Html" do
   describe "page_css" do
 
     test "returns non-empty CSS string" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.byte_size(css) > 0)
     end
 
     test "contains root variables" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, "--bg:"))
       assert (String.contains(css, "--acc:"))
     end
 
     test "contains sidebar styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, "#sb"))
     end
 
     test "contains copy button styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, ".copy-btn"))
     end
 
     test "contains item styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, ".item"))
       assert (String.contains(css, ".ih"))
       assert (String.contains(css, ".ib"))
     end
 
     test "contains badge styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, ".bfn"))
       assert (String.contains(css, ".bty"))
       assert (String.contains(css, ".bif"))
@@ -46,34 +46,34 @@ describe "Html" do
   describe "page_js" do
 
     test "returns non-empty JS string" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.byte_size(js) > 0)
     end
 
     test "contains DOMContentLoaded listener" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "DOMContentLoaded"))
     end
 
     test "contains click toggle for items" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "toggle"))
     end
 
     test "contains copy button logic" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "clipboard"))
       assert (String.contains(js, "Copy"))
     end
 
     test "contains search filter logic" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "openSearch"))
       assert (String.contains(js, "closeSearch"))
     end
 
     test "contains active link highlighting" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "active"))
       assert (String.contains(js, "pathname"))
     end
@@ -83,63 +83,63 @@ describe "Html" do
   describe "page" do
 
     test "wraps content in HTML shell" do
-      let html = Html.page("Test", "", false, "<p>hello</p>")
+      let html = DocHtml.page("Test", "", false, "<p>hello</p>")
       assert (String.contains(html, "<!DOCTYPE html>"))
       assert (String.contains(html, "</html>"))
     end
 
     test "includes title in head" do
-      let html = Html.page("MyModule", "", false, "")
+      let html = DocHtml.page("MyModule", "", false, "")
       assert (String.contains(html, "MyModule"))
       assert (String.contains(html, "<title>"))
     end
 
     test "includes sidebar content" do
-      let html = Html.page("Test", "<a>Link</a>", false, "")
+      let html = DocHtml.page("Test", "<a>Link</a>", false, "")
       assert (String.contains(html, "<a>Link</a>"))
     end
 
     test "includes main content" do
-      let html = Html.page("Test", "", false, "<p>Body</p>")
+      let html = DocHtml.page("Test", "", false, "<p>Body</p>")
       assert (String.contains(html, "<p>Body</p>"))
     end
 
     test "escapes title HTML" do
-      let html = Html.page("A & B", "", false, "")
+      let html = DocHtml.page("A & B", "", false, "")
       assert (String.contains(html, "A &amp; B"))
     end
 
     test "includes CSS and JS" do
-      let html = Html.page("Test", "", false, "")
+      let html = DocHtml.page("Test", "", false, "")
       assert (String.contains(html, "<style>"))
       assert (String.contains(html, "<script>"))
     end
 
     test "index page has active class on overview link" do
-      let html = Html.page("Test", "", true, "")
+      let html = DocHtml.page("Test", "", true, "")
       assert (String.contains(html, "sl active"))
     end
 
     test "non-index page does not have active class on overview" do
-      let html = Html.page("Test", "", false, "")
+      let html = DocHtml.page("Test", "", false, "")
       -- Should have the sl class but not active
       assert (String.contains(html, "class=\"sl\""))
     end
 
     test "includes search input" do
-      let html = Html.page("Test", "", false, "")
+      let html = DocHtml.page("Test", "", false, "")
       assert (String.contains(html, "id=\"search-input\""))
       assert (String.contains(html, "search"))
     end
 
     test "includes nav and main elements" do
-      let html = Html.page("Test", "", false, "")
+      let html = DocHtml.page("Test", "", false, "")
       assert (String.contains(html, "id=\"sb\""))
       assert (String.contains(html, "id=\"main\""))
     end
 
     test "includes March Docs header" do
-      let html = Html.page("Test", "", false, "")
+      let html = DocHtml.page("Test", "", false, "")
       assert (String.contains(html, "March Docs"))
     end
 
@@ -148,26 +148,26 @@ describe "Html" do
   describe "sidebar_links" do
 
     test "empty list returns empty string" do
-      let result = Html.sidebar_links(Nil)
+      let result = DocHtml.sidebar_links(Nil)
       assert (result == "")
     end
 
     test "generates links for modules" do
-      let result = Html.sidebar_links(Cons("String", Cons("List", Nil)))
+      let result = DocHtml.sidebar_links(Cons("String", Cons("List", Nil)))
       assert (String.contains(result, "String.html"))
       assert (String.contains(result, "List.html"))
       assert (String.contains(result, "class=\"sl\""))
     end
 
     test "single module link" do
-      let result = Html.sidebar_links(Cons("IO", Nil))
+      let result = DocHtml.sidebar_links(Cons("IO", Nil))
       assert (String.contains(result, "IO.html"))
       assert (String.contains(result, ">IO</a>"))
     end
 
     test "many module links" do
       let mods = Cons("A", Cons("B", Cons("C", Cons("D", Cons("E", Nil)))))
-      let result = Html.sidebar_links(mods)
+      let result = DocHtml.sidebar_links(mods)
       assert (String.contains(result, "A.html"))
       assert (String.contains(result, "B.html"))
       assert (String.contains(result, "C.html"))
@@ -180,56 +180,56 @@ describe "Html" do
   describe "page_css details" do
 
     test "contains main content styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, "#main"))
     end
 
     test "contains module doc card styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, ".mdoc"))
     end
 
     test "contains private badge style" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, ".bpfn"))
     end
 
     test "contains private type badge style" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, ".bpt"))
     end
 
     test "contains search input styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, "#search-input"))
     end
 
     test "contains name and sig styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, ".name"))
       assert (String.contains(css, ".sig"))
     end
 
     test "contains heading styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, "h1"))
       assert (String.contains(css, "h2"))
     end
 
     test "contains link styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, "a{"))
       assert (String.contains(css, "a:hover"))
     end
 
     test "contains pre and code styles" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, "pre{"))
       assert (String.contains(css, "code{"))
     end
 
     test "contains paragraph style" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, "p{"))
     end
 
@@ -238,34 +238,34 @@ describe "Html" do
   describe "page_js details" do
 
     test "contains search input handler" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "getElementById"))
       assert (String.contains(js, "'search-overlay'"))
     end
 
     test "contains item toggle handler" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "querySelectorAll"))
       assert (String.contains(js, "'.ih'"))
     end
 
     test "contains theme toggle" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "toggleTheme"))
     end
 
     test "contains copy to clipboard functionality" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "navigator.clipboard.writeText"))
     end
 
     test "contains Copied feedback" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "'Copied!'"))
     end
 
     test "contains timeout for copy button reset" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "setTimeout"))
     end
 
@@ -274,7 +274,7 @@ describe "Html" do
   describe "page structure" do
 
     test "page with all params populated" do
-      let html = Html.page("Title", "<a>Sidebar</a>", true, "<p>Content</p>")
+      let html = DocHtml.page("Title", "<a>Sidebar</a>", true, "<p>Content</p>")
       assert (String.contains(html, "<html lang=\"en\""))
       assert (String.contains(html, "charset"))
       assert (String.contains(html, "viewport"))
@@ -286,30 +286,30 @@ describe "Html" do
     end
 
     test "page with empty strings" do
-      let html = Html.page("", "", false, "")
+      let html = DocHtml.page("", "", false, "")
       assert (String.contains(html, "<!DOCTYPE html>"))
       assert (String.contains(html, "</html>"))
     end
 
     test "page title appears in title tag" do
-      let html = Html.page("MyTitle", "", false, "")
+      let html = DocHtml.page("MyTitle", "", false, "")
       assert (String.contains(html, "<title>MyTitle"))
       assert (String.contains(html, "March Docs</title>"))
     end
 
     test "page contains overview link to index" do
-      let html = Html.page("X", "", false, "")
+      let html = DocHtml.page("X", "", false, "")
       assert (String.contains(html, "index.html"))
       assert (String.contains(html, "Overview"))
     end
 
     test "page includes meta viewport" do
-      let html = Html.page("T", "", false, "")
+      let html = DocHtml.page("T", "", false, "")
       assert (String.contains(html, "width=device-width"))
     end
 
     test "multiple sidebar links separated by newline" do
-      let links = Html.sidebar_links(Cons("A", Cons("B", Nil)))
+      let links = DocHtml.sidebar_links(Cons("A", Cons("B", Nil)))
       assert (String.contains(links, "\n"))
     end
 
@@ -318,7 +318,7 @@ describe "Html" do
   describe "css comprehensive" do
 
     test "css has all badge types" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, ".bfn"))
       assert (String.contains(css, ".bpfn"))
       assert (String.contains(css, ".bty"))
@@ -327,7 +327,7 @@ describe "Html" do
     end
 
     test "css has all structural elements" do
-      let css = Html.page_css()
+      let css = DocHtml.page_css()
       assert (String.contains(css, "body"))
       assert (String.contains(css, "code"))
       assert (String.contains(css, "pre"))
@@ -348,7 +348,7 @@ describe "Html" do
   describe "js comprehensive" do
 
     test "js handles all interactivity" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "forEach"))
       assert (String.contains(js, "addEventListener"))
       assert (String.contains(js, "click"))
@@ -357,7 +357,7 @@ describe "Html" do
     end
 
     test "js wraps pre elements with div" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "createElement"))
       assert (String.contains(js, "'div'"))
       assert (String.contains(js, "'button'"))
@@ -365,12 +365,12 @@ describe "Html" do
     end
 
     test "js handles copy error gracefully" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, ".catch"))
     end
 
     test "js selects code text from pre" do
-      let js = Html.page_js()
+      let js = DocHtml.page_js()
       assert (String.contains(js, "querySelector"))
       assert (String.contains(js, "'code'"))
       assert (String.contains(js, "textContent"))
@@ -381,24 +381,24 @@ describe "Html" do
   describe "sidebar_links advanced" do
 
     test "sidebar links contain href attributes" do
-      let result = Html.sidebar_links(Cons("Mod", Nil))
+      let result = DocHtml.sidebar_links(Cons("Mod", Nil))
       assert (String.contains(result, "href=\"Mod.html\""))
     end
 
     test "sidebar links contain display text" do
-      let result = Html.sidebar_links(Cons("MyModule", Nil))
+      let result = DocHtml.sidebar_links(Cons("MyModule", Nil))
       assert (String.contains(result, ">MyModule</a>"))
     end
 
     test "three module sidebar" do
-      let result = Html.sidebar_links(Cons("X", Cons("Y", Cons("Z", Nil))))
+      let result = DocHtml.sidebar_links(Cons("X", Cons("Y", Cons("Z", Nil))))
       assert (String.contains(result, "X.html"))
       assert (String.contains(result, "Y.html"))
       assert (String.contains(result, "Z.html"))
     end
 
     test "sidebar links use anchor tags" do
-      let result = Html.sidebar_links(Cons("Test", Nil))
+      let result = DocHtml.sidebar_links(Cons("Test", Nil))
       assert (String.contains(result, "<a"))
       assert (String.contains(result, "</a>"))
     end
@@ -408,13 +408,13 @@ describe "Html" do
   describe "page variations" do
 
     test "page with long title" do
-      let html = Html.page("A Very Long Module Name Here", "", false, "")
+      let html = DocHtml.page("A Very Long Module Name Here", "", false, "")
       assert (String.contains(html, "A Very Long Module Name Here"))
     end
 
     test "page with complex sidebar" do
-      let sidebar = Html.sidebar_links(Cons("A", Cons("B", Cons("C", Nil))))
-      let html = Html.page("Test", sidebar, false, "<p>x</p>")
+      let sidebar = DocHtml.sidebar_links(Cons("A", Cons("B", Cons("C", Nil))))
+      let html = DocHtml.page("Test", sidebar, false, "<p>x</p>")
       assert (String.contains(html, "A.html"))
       assert (String.contains(html, "B.html"))
       assert (String.contains(html, "C.html"))
@@ -422,20 +422,20 @@ describe "Html" do
     end
 
     test "page with special chars in content" do
-      let html = Html.page("T", "", false, "<div class=\"custom\">&amp;</div>")
+      let html = DocHtml.page("T", "", false, "<div class=\"custom\">&amp;</div>")
       assert (String.contains(html, "class=\"custom\""))
       assert (String.contains(html, "&amp;"))
     end
 
     test "page as index vs non-index" do
-      let idx = Html.page("T", "", true, "")
-      let non = Html.page("T", "", false, "")
+      let idx = DocHtml.page("T", "", true, "")
+      let non = DocHtml.page("T", "", false, "")
       assert (String.contains(idx, "sl active"))
       assert (String.contains(non, "class=\"sl\""))
     end
 
     test "page head has proper meta tags" do
-      let html = Html.page("T", "", false, "")
+      let html = DocHtml.page("T", "", false, "")
       assert (String.contains(html, "charset=\"UTF-8\""))
       assert (String.contains(html, "width=device-width,initial-scale=1"))
     end

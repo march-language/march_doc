@@ -5,6 +5,25 @@
 
 mod MarchDoc do
 
+  import DocHtml
+
+-- Explicit pfn loop to avoid FBIP closure-capture RC bug in List.each.
+-- List.each with a capturing lambda frees the closure (and captured registry/sidebar)
+-- via FBIP after the first iteration, corrupting subsequent iterations.
+pfn gen_module_pages(modules, output_dir, sidebar, registry, source_url) do
+  match modules do
+  Nil -> ()
+  Cons(info, rest) ->
+    let name = Parser.info_name(info)
+    let html = DocHtml.render_module(info, sidebar, registry, source_url)
+    match File.write(output_dir ++ "/" ++ name ++ ".html", html) do
+      Err(_) -> IO.warn("march_doc: failed to write " ++ name ++ ".html")
+      Ok(_) -> ()
+    end
+    gen_module_pages(rest, output_dir, sidebar, registry, source_url)
+  end
+end
+
 -- Generate HTML documentation for all .march files in the given directories.
 -- source_url is an optional URL pattern with {path} and {line} placeholders for source links.
 fn generate(src_dirs : List(String), output_dir : String, include_private : Bool, source_url : Option(String)) : () do
@@ -13,9 +32,9 @@ fn generate(src_dirs : List(String), output_dir : String, include_private : Bool
     fn (a, b) -> a < b
   )
   IO.warn("march_doc: parsing " ++ String.from_int(List.length(all_files)) ++ " source files...")
-  let modules = List.sort_by(
-    List.filter_map(all_files, fn path -> Parser.parse_file(path, include_private)),
-    fn (a, b) -> Parser.info_name(a) < Parser.info_name(b)
+  let raw_modules = List.filter_map(all_files, fn path -> Parser.parse_file(path, include_private))
+  let modules = List.sort_by(raw_modules, fn (a, b) ->
+    Parser.info_name(a) < Parser.info_name(b)
   )
   IO.warn("march_doc: generating " ++ String.from_int(List.length(modules)) ++ " module pages...")
   match Dir.mkdir_p(output_dir) do
@@ -35,24 +54,16 @@ fn generate(src_dirs : List(String), output_dir : String, include_private : Bool
   end
   let guides_dir = project_root ++ "/guides"
   let guide_files = Guides.discover(guides_dir)
-
   -- Build combined sidebar: guides (if any) + hierarchical modules
   let guide_sidebar = if List.is_empty(guide_files) do ""
     else "<div class=\"sb-heading\">Guides</div>" ++ Guides.sidebar_links(guide_files) end
-  let module_sidebar = Html.sidebar_nav(modules)
+  let module_sidebar = DocHtml.sidebar_nav(modules)
   let sidebar = guide_sidebar ++ "<div class=\"sb-heading\">Modules</div>" ++ module_sidebar
 
   let registry = TypeRegistry.build_registry(modules)
 
   -- Generate module pages
-  List.each(modules, fn info ->
-    let name = Parser.info_name(info)
-    let html = Html.render_module(info, sidebar, registry, source_url)
-    match File.write(output_dir ++ "/" ++ name ++ ".html", html) do
-      Err(_) -> IO.warn("march_doc: failed to write " ++ name ++ ".html")
-      Ok(_) -> ()
-    end
-  )
+  gen_module_pages(modules, output_dir, sidebar, registry, source_url)
 
   -- Generate guide pages
   if !List.is_empty(guide_files) do
@@ -71,7 +82,7 @@ fn generate(src_dirs : List(String), output_dir : String, include_private : Bool
   else () end
 
   -- Generate index page
-  let idx = Html.render_index(modules, sidebar)
+  let idx = DocHtml.render_index(modules, sidebar)
   match File.write(output_dir ++ "/index.html", idx) do
     Err(_) -> IO.warn("march_doc: failed to write index.html")
     Ok(_) -> ()
