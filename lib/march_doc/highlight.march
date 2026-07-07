@@ -1,0 +1,335 @@
+-- Highlight — lightweight, server-side syntax highlighting for fenced code
+-- blocks.  No client-side JavaScript: every token is html-escaped and wrapped
+-- in a <span class="tok-*"> so the CSS theme in the host page colors it.
+--
+-- Design / RC discipline (mirrors markdown.march):
+--   * The tokenizer walks a List(String) of single-character strings
+--     (`string_chars`) and accumulates output as a List(String) that is
+--     reversed + joined at the very end.  We NEVER use the recursive
+--     `acc ++ char` string-accumulation pattern (a known compiled-codegen /
+--     Perceus RC hazard); multi-character tokens are collected as a
+--     List(String) of chars and joined with String.join(_, "").
+--   * Every inner scanning loop is a top-level `pfn` (not a self-capturing
+--     recursive closure) to avoid Perceus RC underflow.
+--   * html_escape is applied to token *text* before it is wrapped in a span,
+--     so we can never emit unescaped source (e.g. `<` always becomes `&lt;`).
+--
+-- Robustness contract: the tokenizer never crashes and never drops a
+-- character.  Anything it does not recognize is emitted as escaped text with
+-- no span.  Correctness (escaping + no character loss) beats completeness.
+
+mod Highlight do
+
+-- Local html-escape (kept independent of Markdown so there is no module cycle:
+-- Markdown imports Highlight, not the other way around).  Escapes the five
+-- characters that matter inside a <pre><code> context.
+fn html_escape(s : String) : String do
+  let s = String.replace_all(s, "&", "&amp;")
+  let s = String.replace_all(s, "<", "&lt;")
+  let s = String.replace_all(s, ">", "&gt;")
+  let s = String.replace_all(s, "\"", "&quot;")
+  s
+end
+
+-- ── Character classification (single-char strings) ───────────────────────────
+-- Implemented with plain string range comparisons (ASCII) rather than the
+-- char_is_* builtins: those are interpreter-only and fail to link in native
+-- (compiled) builds, which is how forgepm serves this code.  Pure string
+-- comparison compiles everywhere and never introduces a runtime dependency.
+
+pfn is_digit(c : String) : Bool do c >= "0" && c <= "9" end
+
+pfn is_alpha(c : String) : Bool do
+  (c >= "a" && c <= "z") || (c >= "A" && c <= "Z")
+end
+
+-- Identifier start: a letter or underscore.  (Kept permissive on purpose.)
+pfn is_ident_start(c : String) : Bool do
+  is_alpha(c) || c == "_"
+end
+
+-- Identifier continuation: letters, digits, underscore.
+pfn is_ident_char(c : String) : Bool do
+  is_alpha(c) || is_digit(c) || c == "_"
+end
+
+-- ── Keyword sets (per language) ──────────────────────────────────────────────
+-- Returned as List(String).  `keywords_for` lower-cases the fence language and
+-- maps common aliases onto one set.  Unknown languages get an empty set, which
+-- makes the tokenizer a pure strings/comments/numbers pass.
+
+fn kw_bash() do
+  ["if","then","else","elif","fi","for","while","do","done","case","esac",
+   "in","function","return","local","export","source","echo","cd","set",
+   "unset","read","exit","break","continue","declare","readonly","shift"]
+end
+
+fn kw_rust() do
+  ["fn","let","mut","const","static","if","else","match","for","while","loop",
+   "return","break","continue","struct","enum","trait","impl","pub","use","mod",
+   "as","where","type","move","ref","self","Self","super","crate","dyn","async",
+   "await","unsafe","extern","in"]
+end
+
+fn kw_toml() do
+  ["true","false"]
+end
+
+fn kw_json() do
+  ["true","false","null"]
+end
+
+fn kw_js() do
+  ["function","let","const","var","if","else","for","while","do","return",
+   "break","continue","switch","case","default","new","this","typeof",
+   "instanceof","class","extends","super","import","export","from","as",
+   "async","await","yield","try","catch","finally","throw","delete","void",
+   "in","of","true","false","null","undefined"]
+end
+
+fn kw_python() do
+  ["def","return","if","elif","else","for","while","break","continue","pass",
+   "import","from","as","class","try","except","finally","raise","with","lambda",
+   "yield","global","nonlocal","del","assert","and","or","not","is","in","None",
+   "True","False","async","await","match","case"]
+end
+
+fn kw_march() do
+  ["mod","fn","pfn","type","ptype","actor","state","init","on","let","if",
+   "else","do","end","match","use","import","spawn","send","receive","return",
+   "true","false"]
+end
+
+-- Map a (already lower-cased) fence language name to its keyword set.
+fn keywords_for(lang : String) : List(String) do
+  if lang == "bash" || lang == "sh" || lang == "shell" || lang == "zsh" do kw_bash()
+  else if lang == "rust" || lang == "rs" do kw_rust()
+  else if lang == "toml" do kw_toml()
+  else if lang == "json" do kw_json()
+  else if lang == "javascript" || lang == "js" || lang == "typescript" ||
+          lang == "ts" || lang == "jsx" || lang == "tsx" do kw_js()
+  else if lang == "python" || lang == "py" do kw_python()
+  else if lang == "march" do kw_march()
+  else [] end end end end end end end
+end
+
+-- ── Line-comment lead-ins per language ───────────────────────────────────────
+-- We support "#", "//", and "--".  Which ones are active depends on language so
+-- that e.g. a bare "#" in rust is not a comment.  When in doubt we allow the
+-- common ones; an over-eager comment is still escaped and never mangles code.
+
+fn allows_hash_comment(lang : String) : Bool do
+  lang == "bash" || lang == "sh" || lang == "shell" || lang == "zsh" ||
+  lang == "python" || lang == "py" || lang == "toml" || lang == "" ||
+  lang == "yaml" || lang == "yml"
+end
+
+fn allows_slash_comment(lang : String) : Bool do
+  lang == "rust" || lang == "rs" || lang == "javascript" || lang == "js" ||
+  lang == "typescript" || lang == "ts" || lang == "jsx" || lang == "tsx" ||
+  lang == "c" || lang == "cpp" || lang == "java" || lang == "go" || lang == ""
+end
+
+fn allows_dash_comment(lang : String) : Bool do
+  lang == "march" || lang == "sql" || lang == "haskell" || lang == "lua" ||
+  lang == "elm" || lang == ""
+end
+
+fn allows_block_comment(lang : String) : Bool do
+  lang == "rust" || lang == "rs" || lang == "javascript" || lang == "js" ||
+  lang == "typescript" || lang == "ts" || lang == "jsx" || lang == "tsx" ||
+  lang == "c" || lang == "cpp" || lang == "java" || lang == "go" ||
+  lang == "css" || lang == ""
+end
+
+-- ── Span emission ────────────────────────────────────────────────────────────
+
+fn span(cls : String, text : String) : String do
+  "<span class=\"" ++ cls ++ "\">" ++ html_escape(text) ++ "</span>"
+end
+
+fn plain(text : String) : String do
+  html_escape(text)
+end
+
+-- ── Multi-char scanners ──────────────────────────────────────────────────────
+-- Each takes the remaining char list, collects a token as a List(String) of
+-- chars (reversed), and returns (token_string, rest).  No `acc ++ char`.
+
+-- Collect chars while `is_ident_char` holds.  `cacc` is a reversed char list.
+pfn take_word(cs : List(String), cacc : List(String)) : (String, List(String)) do
+  match cs do
+  Nil -> (String.join(List.reverse(cacc), ""), Nil)
+  Cons(c, rest) ->
+    if is_ident_char(c) do take_word(rest, Cons(c, cacc))
+    else (String.join(List.reverse(cacc), ""), cs) end
+  end
+end
+
+-- Collect a run of digits / '.' / '_' (numbers, incl. floats & 1_000).
+pfn take_number(cs : List(String), cacc : List(String)) : (String, List(String)) do
+  match cs do
+  Nil -> (String.join(List.reverse(cacc), ""), Nil)
+  Cons(c, rest) ->
+    if is_digit(c) || c == "." || c == "_" ||
+       c == "x" || c == "b" || c == "o" ||
+       c == "a" || c == "c" || c == "d" || c == "e" || c == "f" do
+      take_number(rest, Cons(c, cacc))
+    else (String.join(List.reverse(cacc), ""), cs) end
+  end
+end
+
+-- Collect the rest of the current line (for line comments).  Stops BEFORE the
+-- newline so the newline is re-emitted by the main loop as plain text.
+pfn take_line(cs : List(String), cacc : List(String)) : (String, List(String)) do
+  match cs do
+  Nil -> (String.join(List.reverse(cacc), ""), Nil)
+  Cons(c, rest) ->
+    if c == "\n" do (String.join(List.reverse(cacc), ""), cs)
+    else take_line(rest, Cons(c, cacc)) end
+  end
+end
+
+-- Collect a quoted string literal.  `q` is the quote char.  The opening quote
+-- has already been consumed and is passed in `cacc`.  Handles backslash escapes
+-- so an escaped quote does not terminate the literal.  If the closing quote is
+-- never found we still return everything collected (never crash / drop chars).
+pfn take_string(cs : List(String), q : String, cacc : List(String)) : (String, List(String)) do
+  match cs do
+  Nil -> (String.join(List.reverse(cacc), ""), Nil)
+  Cons(c, rest) ->
+    if c == "\\" do
+      -- keep the backslash and the next char verbatim (if present)
+      match rest do
+      Nil -> (String.join(List.reverse(Cons(c, cacc)), ""), Nil)
+      Cons(n, rest2) -> take_string(rest2, q, Cons(n, Cons(c, cacc)))
+      end
+    else
+      if c == q do (String.join(List.reverse(Cons(c, cacc)), ""), rest)
+      else
+        if c == "\n" do
+          -- unterminated on this line: stop, let newline re-emit as plain
+          (String.join(List.reverse(cacc), ""), cs)
+        else take_string(rest, q, Cons(c, cacc)) end
+      end
+    end
+  end
+end
+
+-- Collect a /* ... */ block comment.  Opening "/*" already consumed (in cacc).
+pfn take_block(cs : List(String), cacc : List(String)) : (String, List(String)) do
+  match cs do
+  Nil -> (String.join(List.reverse(cacc), ""), Nil)
+  Cons(c, rest) ->
+    if c == "*" do
+      match rest do
+      Cons(n, rest2) ->
+        if n == "/" do
+          (String.join(List.reverse(Cons("/", Cons("*", cacc))), ""), rest2)
+        else take_block(rest, Cons(c, cacc)) end
+      Nil -> (String.join(List.reverse(Cons(c, cacc)), ""), Nil)
+      end
+    else take_block(rest, Cons(c, cacc)) end
+  end
+end
+
+-- ── Main tokenizer loop ──────────────────────────────────────────────────────
+-- Walks the char list, classifying each position.  `kws` is the keyword set,
+-- the *_c booleans pre-decide which comment lead-ins are active for the
+-- language, `blk` enables /* */.  Output is a reversed List(String) of escaped
+-- HTML fragments joined at the end by `highlight`.
+pfn tok_go(cs : List(String), kws : List(String), hash_c : Bool, slash_c : Bool, dash_c : Bool, blk : Bool, out : List(String)) : List(String) do
+  match cs do
+  Nil -> out
+  Cons(c, rest) ->
+    -- String literals: " ' `
+    if c == "\"" || c == "'" || c == "`" do
+      let (lit, rest2) = take_string(rest, c, Cons(c, Nil))
+      tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-str", lit), out))
+    else
+      -- # line comment
+      if hash_c && c == "#" do
+        let (com, rest2) = take_line(rest, Cons(c, Nil))
+        tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-com", com), out))
+      else
+        -- // line comment  or  /* block comment
+        if (slash_c || blk) && c == "/" do
+          match rest do
+          Cons(n, rest2) ->
+            if slash_c && n == "/" do
+              let (com, rest3) = take_line(rest2, Cons("/", Cons("/", Nil)))
+              tok_go(rest3, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-com", com), out))
+            else
+              if blk && n == "*" do
+                let (com, rest3) = take_block(rest2, Cons("*", Cons("/", Nil)))
+                tok_go(rest3, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-com", com), out))
+              else
+                tok_go(rest, kws, hash_c, slash_c, dash_c, blk, Cons(plain(c), out))
+              end
+            end
+          Nil -> tok_go(rest, kws, hash_c, slash_c, dash_c, blk, Cons(plain(c), out))
+          end
+        else
+          -- -- line comment
+          if dash_c && c == "-" do
+            match rest do
+            Cons(n, rest2) ->
+              if n == "-" do
+                let (com, rest3) = take_line(rest2, Cons("-", Cons("-", Nil)))
+                tok_go(rest3, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-com", com), out))
+              else
+                tok_go(rest, kws, hash_c, slash_c, dash_c, blk, Cons(plain(c), out))
+              end
+            Nil -> tok_go(rest, kws, hash_c, slash_c, dash_c, blk, Cons(plain(c), out))
+            end
+          else
+            -- numbers
+            if is_digit(c) do
+              let (num, rest2) = take_number(cs, Nil)
+              tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-num", num), out))
+            else
+              -- identifiers / keywords
+              if is_ident_start(c) do
+                let (word, rest2) = take_word(cs, Nil)
+                let frag = if List.member(kws, word) do span("tok-kw", word)
+                  else plain(word) end
+                tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, Cons(frag, out))
+              else
+                -- any other single char: emit escaped, no span
+                tok_go(rest, kws, hash_c, slash_c, dash_c, blk, Cons(plain(c), out))
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+-- ── Public entry ─────────────────────────────────────────────────────────────
+
+doc """
+Syntax-highlight a fenced code block.  `lang` is the fence language (may be
+""); `code` is the raw block body.  Returns HTML with tokens wrapped in
+<span class="tok-*"> — always html-escaped, never crashing or dropping chars.
+An empty/unknown language still gets a generic strings/comments/numbers pass.
+"""
+fn highlight(lang : String, code : String) : String do
+  -- Empty body: nothing to tokenize.  Guarding here also sidesteps a Perceus
+  -- RC-underflow that fires when tok_go is entered with an already-empty char
+  -- list on its very first call (the keyword-set / flag params are dropped
+  -- unused in that degenerate case).
+  if String.is_empty(code) do ""
+  else
+    let l = String.to_lowercase(String.trim(lang))
+    let kws = keywords_for(l)
+    let hash_c = allows_hash_comment(l)
+    let slash_c = allows_slash_comment(l)
+    let dash_c = allows_dash_comment(l)
+    let blk = allows_block_comment(l)
+    let frags = tok_go(string_chars(code), kws, hash_c, slash_c, dash_c, blk, Nil)
+    String.join(List.reverse(frags), "")
+  end
+end
+
+end
