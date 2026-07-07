@@ -85,6 +85,22 @@ describe "Markdown" do
       assert (Markdown.render_inline("`<div>`") == "<code>&lt;div&gt;</code>")
     end
 
+    test "single-escapes ampersand in prose" do
+      assert (Markdown.render_inline("A & B") == "A &amp; B")
+    end
+
+    test "single-escapes less-than in prose" do
+      assert (Markdown.render_inline("x < y") == "x &lt; y")
+    end
+
+    test "single-escapes special chars around a link" do
+      assert (Markdown.render_inline("a & [b](u) < c") == "a &amp; <a href=\"u\">b</a> &lt; c")
+    end
+
+    test "link text and url single-escape special chars" do
+      assert (Markdown.render_inline("[a & b](u&v)") == "<a href=\"u&amp;v\">a &amp; b</a>")
+    end
+
   end
 
   describe "md_to_html" do
@@ -117,8 +133,12 @@ describe "Markdown" do
     test "code fence with language tag" do
       let md = "```march\nlet x = 1\n```"
       let result = Markdown.md_to_html(md)
-      assert (String.contains(result, "<pre><code>"))
-      assert (String.contains(result, "let x = 1"))
+      -- The language is now preserved as a class and the body is highlighted:
+      -- `let` becomes a tok-kw span, so assert on the structural pieces.
+      assert (String.contains(result, "<pre><code class=\"language-march\">"))
+      assert (String.contains(result, "<span class=\"tok-kw\">let</span>"))
+      assert (String.contains(result, "x = "))
+      assert (String.contains(result, "<span class=\"tok-num\">1</span>"))
     end
 
     test "h2 heading" do
@@ -398,6 +418,192 @@ describe "Markdown" do
       assert (String.contains(result, "<h4>"))
       assert (String.contains(result, "Subsection"))
       assert (String.contains(result, "Final paragraph"))
+    end
+
+    test "indented code block renders as pre/code" do
+      let md = "Example:\n\n  actor Counter do\n    state = 0\n  end"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<pre><code>"))
+      assert (String.contains(result, "actor Counter do"))
+      assert (String.contains(result, "</code></pre>"))
+    end
+
+    test "indented code block preserves inner indentation" do
+      let md = "Example:\n\n  fn foo() do\n    42\n  end"
+      let result = Markdown.md_to_html(md)
+      -- strip 2-space outer indent: "  end" → "end" (0 inner), "    42" → "  42" (2 inner)
+      assert (String.contains(result, "fn foo() do\n  42\nend"))
+    end
+
+    test "indented code block with blank line inside" do
+      let md = "Example:\n\n  line 1\n\n  line 2"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<pre><code>"))
+      assert (String.contains(result, "line 1"))
+      assert (String.contains(result, "line 2"))
+    end
+
+    test "indented code block escapes HTML" do
+      let md = "Example:\n\n  pid <- Inc()"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "&lt;-"))
+      assert (String.contains(result, "<pre><code>"))
+    end
+
+    test "indented lines inside a paragraph are not a code block" do
+      let md = "Some text\n  continuation"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<p>"))
+      assert (String.contains(result, "Some text"))
+      assert (String.contains(result, "<pre><code>") == false)
+    end
+
+    -- ── GFM tables ──────────────────────────────────────────────────────────
+
+    test "table renders table/thead/tbody" do
+      let md = "| A | B |\n|---|---|\n| 1 | 2 |"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<table class=\"md-table\">"))
+      assert (String.contains(result, "<thead>"))
+      assert (String.contains(result, "<tbody>"))
+      assert (String.contains(result, "</table>"))
+    end
+
+    test "table header cells use th, body cells use td" do
+      let md = "| A | B |\n|---|---|\n| 1 | 2 |"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<th>A</th>"))
+      assert (String.contains(result, "<th>B</th>"))
+      assert (String.contains(result, "<td>1</td>"))
+      assert (String.contains(result, "<td>2</td>"))
+    end
+
+    test "table column alignment emits text-align styles" do
+      let md = "| L | R | C |\n|:--|--:|:-:|\n| a | b | c |"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<th style=\"text-align:left\">L</th>"))
+      assert (String.contains(result, "<th style=\"text-align:right\">R</th>"))
+      assert (String.contains(result, "<th style=\"text-align:center\">C</th>"))
+      assert (String.contains(result, "<td style=\"text-align:left\">a</td>"))
+      assert (String.contains(result, "<td style=\"text-align:right\">b</td>"))
+      assert (String.contains(result, "<td style=\"text-align:center\">c</td>"))
+    end
+
+    test "table works without outer border pipes" do
+      let md = "A | B\n--- | ---\n1 | 2"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<th>A</th>"))
+      assert (String.contains(result, "<th>B</th>"))
+      assert (String.contains(result, "<td>1</td>"))
+    end
+
+    test "stray pipe in prose is not a table" do
+      let result = Markdown.md_to_html("use a | b in prose")
+      assert (String.contains(result, "<p>"))
+      assert (String.contains(result, "md-table") == false)
+      assert (String.contains(result, "<table") == false)
+    end
+
+    test "empty middle table cell is kept" do
+      let md = "| A | B |\n|---|---|\n| 1 |  |"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<td></td>"))
+    end
+
+    test "table stops at blank line, paragraph follows" do
+      let md = "| A |\n|---|\n| 1 |\n\nAfter"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "</table>"))
+      assert (String.contains(result, "<p>After</p>"))
+    end
+
+    -- ── Fenced code keeps its language ──────────────────────────────────────
+
+    test "rust fence yields language-rust class" do
+      let md = "```rust\nlet x = 1\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<pre><code class=\"language-rust\">"))
+    end
+
+    test "fence with no language has no class" do
+      let md = "```\nplain text\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<pre><code>"))
+      assert (String.contains(result, "language-") == false)
+    end
+
+    -- ── Server-side syntax highlighting ─────────────────────────────────────
+
+    test "rust fence highlights keyword and number" do
+      let md = "```rust\nlet x = 10\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "<span class=\"tok-kw\">let</span>"))
+      assert (String.contains(result, "<span class=\"tok-num\">10</span>"))
+    end
+
+    test "bash fence highlights string and comment" do
+      let md = "```bash\necho \"hi\" # note\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "class=\"language-bash\""))
+      assert (String.contains(result, "<span class=\"tok-str\">&quot;hi&quot;</span>"))
+      assert (String.contains(result, "<span class=\"tok-com\"># note</span>"))
+    end
+
+    test "highlighted code stays html-escaped (no raw tags)" do
+      let md = "```rust\nlet a = b < c;\n```"
+      let result = Markdown.md_to_html(md)
+      assert (String.contains(result, "&lt;"))
+      -- the "<" must never survive as a raw tag opener
+      assert (String.contains(result, "b < c") == false)
+    end
+
+  end
+
+  describe "Highlight" do
+
+    test "highlights rust keywords" do
+      let r = Highlight.highlight("rust", "fn main() { let x = 1; }")
+      assert (String.contains(r, "<span class=\"tok-kw\">fn</span>"))
+      assert (String.contains(r, "<span class=\"tok-kw\">let</span>"))
+    end
+
+    test "highlights a string literal" do
+      let r = Highlight.highlight("bash", "echo \"hello\"")
+      assert (String.contains(r, "<span class=\"tok-str\">&quot;hello&quot;</span>"))
+    end
+
+    test "highlights a line comment" do
+      let r = Highlight.highlight("python", "x = 1  # a comment")
+      assert (String.contains(r, "<span class=\"tok-com\"># a comment</span>"))
+    end
+
+    test "highlights a block comment" do
+      let r = Highlight.highlight("rust", "/* block */ let z = 1")
+      assert (String.contains(r, "<span class=\"tok-com\">/* block */</span>"))
+    end
+
+    test "highlights a number" do
+      let r = Highlight.highlight("json", "{\"n\": 42}")
+      assert (String.contains(r, "<span class=\"tok-num\">42</span>"))
+    end
+
+    test "escapes angle brackets inside code" do
+      let r = Highlight.highlight("rust", "a < b")
+      assert (String.contains(r, "&lt;"))
+      assert (String.contains(r, "a < b") == false)
+    end
+
+    test "unknown language still escapes and finds strings/numbers" do
+      let r = Highlight.highlight("brainfuck", "+++ \"s\" 99")
+      assert (String.contains(r, "<span class=\"tok-str\">&quot;s&quot;</span>"))
+      assert (String.contains(r, "<span class=\"tok-num\">99</span>"))
+    end
+
+    test "march keywords are highlighted" do
+      let r = Highlight.highlight("march", "fn foo() do end")
+      assert (String.contains(r, "<span class=\"tok-kw\">fn</span>"))
+      assert (String.contains(r, "<span class=\"tok-kw\">do</span>"))
+      assert (String.contains(r, "<span class=\"tok-kw\">end</span>"))
     end
 
   end

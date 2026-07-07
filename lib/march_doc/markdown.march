@@ -2,6 +2,8 @@
 
 mod Markdown do
 
+  import Highlight
+
 -- ── Utilities ────────────────────────────────────────────────────────────────
 
 fn html_escape(s : String) : String do
@@ -21,83 +23,183 @@ fn drop_suffix(s : String, suffix : String) : String do
 end
 
 -- ── Inline rendering ─────────────────────────────────────────────────────────
+-- Every inline loop walks a List(String) of single-character strings
+-- (`string_chars`) and threads the REMAINING input as a shared char-list tail
+-- through recursion — NEVER a String `rest` produced by String.split_first.
+-- Compiled (Perceus), a String slice threaded through split_first recursion with
+-- intervening work is freed early (the second tuple field's backing store is
+-- reclaimed by a mis-inserted DecRC), so `render_inline` used to lose everything
+-- after the first code span / link natively while the interpreter was fine. A
+-- cons-cell tail is RC-counted per cell and stays correct — the same
+-- compiled-safe discipline used by lib/march_doc/highlight.march's tokenizer.
+-- Output is accumulated as a reversed List(String) joined at the very end; the
+-- `acc ++ char` string accumulator is likewise avoided.
+
+-- ── Scan primitives ──────────────────────────────────────────────────────────
+-- Each split_* returns the *before* text as a String and the *rest* as the
+-- actual char-list tail (shared cons cells), so ownership stays obvious to
+-- Perceus. Callers guard split_* with the matching has_* before calling.
+
+-- Does the char list contain `ch`?
+pfn has_char(cs : List(String), ch : String) : Bool do
+  match cs do
+  Nil -> false
+  Cons(c, rest) -> if c == ch do true else has_char(rest, ch) end
+  end
+end
+
+-- Split at the first `ch`. Returns (before_string, tail_after_ch).
+pfn split_at_char(cs : List(String), ch : String, bacc : List(String)) : (String, List(String)) do
+  match cs do
+  Nil -> (String.join(List.reverse(bacc), ""), Nil)
+  Cons(c, rest) ->
+    if c == ch do (String.join(List.reverse(bacc), ""), rest)
+    else split_at_char(rest, ch, Cons(c, bacc)) end
+  end
+end
+
+-- Does the char list contain the adjacent two-char sequence a,b?
+pfn has_seq(cs : List(String), a : String, b : String) : Bool do
+  match cs do
+  Nil -> false
+  Cons(c, rest) ->
+    if c == a do
+      match rest do
+      Cons(c2, _) -> if c2 == b do true else has_seq(rest, a, b) end
+      Nil -> false
+      end
+    else has_seq(rest, a, b) end
+  end
+end
+
+-- Split at the first adjacent a,b. Returns (before_string, tail_after_both).
+pfn split_at_seq(cs : List(String), a : String, b : String, bacc : List(String)) : (String, List(String)) do
+  match cs do
+  Nil -> (String.join(List.reverse(bacc), ""), Nil)
+  Cons(c, rest) ->
+    if c == a do
+      match rest do
+      Cons(c2, rest2) ->
+        if c2 == b do (String.join(List.reverse(bacc), ""), rest2)
+        else split_at_seq(rest, a, b, Cons(c, bacc)) end
+      Nil -> split_at_seq(rest, a, b, Cons(c, bacc))
+      end
+    else split_at_seq(rest, a, b, Cons(c, bacc)) end
+  end
+end
+
+-- ── Inline passes (char-walkers) ─────────────────────────────────────────────
+
+-- links_go: [text](url). Operates on already-escaped text and emits its pieces
+-- WITHOUT re-escaping — `segments_go` html_escapes the whole run once before
+-- calling render_links, so `before`/`link_text`/`url` are already escaped (a
+-- `"` in a URL is already `&quot;`, so attribute injection is impossible).
+-- Re-escaping here produced the classic double-escape ("&" -> "&amp;amp;").
+-- This matches the sibling bold_go/italic_go passes, which also emit raw.
+-- `rest` is a char-list tail.
+pfn links_go(cs : List(String), out : List(String)) : List(String) do
+  if has_char(cs, "[") do
+    let (before, after_bracket) = split_at_char(cs, "[", Nil)
+    if has_seq(after_bracket, "]", "(") do
+      let (link_text, after_paren) = split_at_seq(after_bracket, "]", "(", Nil)
+      if has_char(after_paren, ")") do
+        let (url, rest) = split_at_char(after_paren, ")", Nil)
+        let link_html = "<a href=\"" ++ url ++ "\">" ++ link_text ++ "</a>"
+        links_go(rest, Cons(link_html, Cons(before, out)))
+      else
+        -- No closing ): reconstruct original text and emit as literal
+        let plain = before ++ "[" ++ link_text ++ "](" ++ String.join(after_paren, "")
+        List.reverse(Cons(plain, out))
+      end
+    else
+      -- No ]( pattern: reconstruct and emit as literal
+      let plain = before ++ "[" ++ String.join(after_bracket, "")
+      List.reverse(Cons(plain, out))
+    end
+  else
+    List.reverse(Cons(String.join(cs, ""), out))
+  end
+end
+
+-- bold_go: **text**. Emits before/bold_text raw (already escaped upstream).
+pfn bold_go(cs : List(String), out : List(String)) : List(String) do
+  if has_seq(cs, "*", "*") do
+    let (before, after) = split_at_seq(cs, "*", "*", Nil)
+    if has_seq(after, "*", "*") do
+      let (bold_text, rest) = split_at_seq(after, "*", "*", Nil)
+      bold_go(rest, Cons("</strong>", Cons(bold_text, Cons("<strong>", Cons(before, out)))))
+    else
+      List.reverse(Cons(before ++ "**" ++ String.join(after, ""), out))
+    end
+  else
+    List.reverse(Cons(String.join(cs, ""), out))
+  end
+end
+
+-- italic_go: *text*.
+pfn italic_go(cs : List(String), out : List(String)) : List(String) do
+  if has_char(cs, "*") do
+    let (before, after) = split_at_char(cs, "*", Nil)
+    if has_char(after, "*") do
+      let (em_text, rest) = split_at_char(after, "*", Nil)
+      italic_go(rest, Cons("</em>", Cons(em_text, Cons("<em>", Cons(before, out)))))
+    else
+      List.reverse(Cons(before ++ "*" ++ String.join(after, ""), out))
+    end
+  else
+    List.reverse(Cons(String.join(cs, ""), out))
+  end
+end
 
 -- Render [text](url) links in a string (no code spans — call after splitting code).
 fn render_links(text) do
-  fn go(s, out) do
-    match String.split_first(s, "[") do
-    None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
-    Some((before, after_bracket)) ->
-      match String.split_first(after_bracket, "](") do
-      Some((link_text, after_paren)) ->
-        match String.split_first(after_paren, ")") do
-        Some((url, rest)) ->
-          let link_html = "<a href=\"" ++ html_escape(url) ++ "\">" ++ html_escape(link_text) ++ "</a>"
-          go(rest, Cons(link_html, Cons(html_escape(before), out)))
-        None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
-        end
-      None -> String.join(List.reverse(Cons(html_escape(s), out)), "")
-      end
-    end
-  end
-  go(text, Nil)
+  String.join(links_go(string_chars(text), Nil), "")
 end
 
 -- Render **bold** in a string (operates on already-escaped/processed text).
 fn render_bold(text) do
-  fn go(s, out) do
-    match String.split_first(s, "**") do
-    None -> String.join(List.reverse(Cons(s, out)), "")
-    Some((before, after)) ->
-      match String.split_first(after, "**") do
-      Some((bold_text, rest)) ->
-        go(rest, Cons("</strong>", Cons(bold_text, Cons("<strong>", Cons(before, out)))))
-      None -> String.join(List.reverse(Cons(s, out)), "")
-      end
-    end
-  end
-  go(text, Nil)
+  String.join(bold_go(string_chars(text), Nil), "")
 end
 
 -- Render *italic* in a string (operates on already-processed text).
 fn render_italic(text) do
-  fn go(s, out) do
-    match String.split_first(s, "*") do
-    None -> String.join(List.reverse(Cons(s, out)), "")
-    Some((before, after)) ->
-      match String.split_first(after, "*") do
-      Some((em_text, rest)) ->
-        go(rest, Cons("</em>", Cons(em_text, Cons("<em>", Cons(before, out)))))
-      None -> String.join(List.reverse(Cons(s, out)), "")
+  String.join(italic_go(string_chars(text), Nil), "")
+end
+
+-- segments_go: splits on backticks. Non-code text runs through links -> bold ->
+-- italic; code-span content is only html-escaped. Non-code characters are
+-- accumulated in `bacc` until a backtick, then flushed; `rest2` from a matched
+-- code span is a char-list tail (safe to recurse on with intervening work).
+pfn segments_go(cs : List(String), bacc : List(String), out : List(String)) : List(String) do
+  match cs do
+  Nil ->
+    let before = String.join(List.reverse(bacc), "")
+    let processed = render_italic(render_bold(render_links(html_escape(before))))
+    List.reverse(Cons(processed, out))
+  Cons(c, rest) ->
+    if c == "`" do
+      let before = String.join(List.reverse(bacc), "")
+      if has_char(rest, "`") do
+        let (code, rest2) = split_at_char(rest, "`", Nil)
+        let before_processed = render_italic(render_bold(render_links(html_escape(before))))
+        let code_html = "<code>" ++ html_escape(code) ++ "</code>"
+        segments_go(rest2, Nil, Cons(code_html, Cons(before_processed, out)))
+      else
+        -- No closing backtick: emit "before`rest" as plain inline text
+        let plain = before ++ "`" ++ String.join(rest, "")
+        let processed = render_italic(render_bold(render_links(html_escape(plain))))
+        List.reverse(Cons(processed, out))
       end
+    else
+      segments_go(rest, Cons(c, bacc), out)
     end
   end
-  go(text, Nil)
 end
 
 -- Render inline formatting: `code`, [links](url), **bold**, *italic*.
 -- Processing order: code spans first (to protect their contents), then links, bold, italic.
 fn render_inline(text : String) : String do
-  -- Step 1: Process code spans — split around backticks, escape non-code parts
-  fn process_segments(s, out) do
-    match String.split_first(s, "`") do
-    None ->
-      -- No more backticks: apply link/bold/italic to this segment
-      let processed = render_italic(render_bold(render_links(html_escape(s))))
-      List.reverse(Cons(processed, out))
-    Some((before, after)) ->
-      match String.split_first(after, "`") do
-      None ->
-        let processed = render_italic(render_bold(render_links(html_escape(s))))
-        List.reverse(Cons(processed, out))
-      Some((code, rest)) ->
-        let before_processed = render_italic(render_bold(render_links(html_escape(before))))
-        let code_html = "<code>" ++ html_escape(code) ++ "</code>"
-        process_segments(rest, Cons(code_html, Cons(before_processed, out)))
-      end
-    end
-  end
-  String.join(process_segments(text, Nil), "")
+  String.join(segments_go(string_chars(text), Nil, Nil), "")
 end
 
 -- ── Block-level markdown ─────────────────────────────────────────────────────
@@ -110,27 +212,67 @@ fn flush_para(buf, out) do
   end
 end
 
-fn flush_code(buf, out) do
-  let code = html_escape(String.join(List.reverse(buf), "\n"))
-  Cons("</code></pre>", Cons(code, out))
-end
-
 fn is_fence(t) do
   String.byte_size(t) >= 3 && String.slice(t, 0, 3) == "```"
 end
 
-fn md_step_code(line, rest, buf, out, go) do
-  let t = String.trim(line)
-  if t == "```" do go(rest, Nil, flush_code(buf, out), false)
-  else go(rest, Cons(line, buf), out, true) end
+-- Detect a line that starts with at least 2 spaces (indented code block).
+-- Uses the raw (untrimmed) line so leading whitespace is visible.
+fn is_indented_code(line : String) : Bool do
+  String.byte_size(line) >= 2 &&
+  String.slice(line, 0, 1) == " " &&
+  String.slice(line, 1, 1) == " "
+end
+
+-- Drop trailing blank strings from an accumulator list (which is reversed
+-- relative to document order, so "trailing" means the front of the list).
+pfn drop_trailing_blanks(acc : List(String)) : List(String) do
+  match acc do
+  Nil -> Nil
+  Cons(h, t) ->
+    if String.is_empty(String.trim(h)) do drop_trailing_blanks(t)
+    else Cons(h, t) end
+  end
+end
+
+-- Collect consecutive indented lines (and blank lines that may appear inside
+-- the block) into a code block.  Blank lines at the end are stripped.
+-- Returns (code_lines_in_document_order, remaining_lines).
+-- The 2-space common indent is stripped from each collected line.
+pfn collect_indented(lines : List(String), acc : List(String)) : (List(String), List(String)) do
+  match lines do
+  Nil -> (List.reverse(drop_trailing_blanks(acc)), Nil)
+  Cons(line, rest) ->
+    if is_indented_code(line) do
+      collect_indented(rest, Cons(drop_prefix(line, "  "), acc))
+    else
+      let t = String.trim(line)
+      if String.is_empty(t) do
+        collect_indented(rest, Cons("", acc))
+      else
+        -- Rebuild `Cons(line, rest)` instead of returning the original `lines`:
+        -- the sibling is_indented_code arm consumes `line` via drop_prefix, so
+        -- returning `lines` here is a use-after-consume that Perceus miscompiles
+        -- into an RC underflow (hard abort) natively. Reconstructing makes the
+        -- ownership explicit (same idiom as md_go's `Cons(next, more)`).
+        (List.reverse(drop_trailing_blanks(acc)), Cons(line, rest))
+      end
+    end
+  end
 end
 
 fn md_heading(t) do
-  if String.starts_with(t, "### ") do Some(("<h4>", drop_prefix(t, "### ")))
+  if String.starts_with(t, "### ") do
+    let c = drop_prefix(t, "### ")
+    Some("<h4>" ++ html_escape(c) ++ "</h4>")
   else
-    if String.starts_with(t, "## ") do Some(("<h3>", drop_prefix(t, "## ")))
+    if String.starts_with(t, "## ") do
+      let c = drop_prefix(t, "## ")
+      Some("<h3>" ++ html_escape(c) ++ "</h3>")
     else
-      if String.starts_with(t, "# ") do Some(("<h3>", drop_prefix(t, "# ")))
+      if String.starts_with(t, "# ") do
+        let c = drop_prefix(t, "# ")
+        Some("<h3>" ++ html_escape(c) ++ "</h3>")
       else None end
     end
   end
@@ -213,62 +355,259 @@ fn render_admonition(items) do
   "<div class=\"admonition " ++ kind ++ "\">" ++ render_inline(text) ++ "</div>"
 end
 
-fn md_step_text(line, rest, buf, out, go) do
-  let t = String.trim(line)
-  if is_fence(t) do go(rest, Nil, Cons("<pre><code>", flush_para(buf, out)), true)
+-- ── GFM pipe tables ──────────────────────────────────────────────────────────
+-- A table is a header row (contains "|"), then a separator row (only |,-,:,
+-- spaces, with at least one "-"), then zero-or-more body rows (each contains
+-- "|").  We only treat a line as a table start when the *next* line is a
+-- separator, so a stray "|" in prose is not mistaken for a table.
+
+-- Is a trimmed line a table separator? e.g. "|---|:--:|" or "--- | ---".
+-- Rule: non-empty, contains at least one "-", and every char is one of
+-- | - : or space.
+fn is_table_separator(t : String) : Bool do
+  if String.is_empty(t) do false
   else
-    if String.is_empty(t) do go(rest, Nil, flush_para(buf, out), false)
+    if String.contains(t, "-") do only_sep_chars(string_chars(t))
+    else false end
+  end
+end
+
+pfn only_sep_chars(cs : List(String)) : Bool do
+  match cs do
+  Nil -> true
+  Cons(c, rest) ->
+    if c == "|" || c == "-" || c == ":" || c == " " do only_sep_chars(rest)
+    else false end
+  end
+end
+
+-- Drop the first element of a list if it is (trimmed) empty — used to remove
+-- the leading empty cell produced by a leading border "|".
+fn drop_leading_empty(cells : List(String)) : List(String) do
+  match cells do
+  Nil -> Nil
+  Cons(h, t) -> if String.is_empty(String.trim(h)) do t else cells end
+  end
+end
+
+-- Split one table row into trimmed cell strings, stripping the outer empty
+-- cells produced by border "|" (but keeping genuine empty middle cells).
+-- `t` is the already-trimmed row line.
+fn split_cells(t : String) : List(String) do
+  let starts = String.starts_with(t, "|")
+  let ends = String.ends_with(t, "|")
+  let raw = String.split(t, "|")
+  -- strip one leading empty cell if the row began with "|"
+  let a = if starts do drop_leading_empty(raw) else raw end
+  -- strip one trailing empty cell if the row ended with "|"
+  let b = if ends do List.reverse(drop_leading_empty(List.reverse(a))) else a end
+  List.map(b, fn cell -> String.trim(cell))
+end
+
+-- Turn one separator cell into an alignment style attribute (or "").
+-- ":--" left, "--:" right, ":-:" center, else none.
+fn cell_align(sep : String) : String do
+  let s = String.trim(sep)
+  let l = String.starts_with(s, ":")
+  let r = String.ends_with(s, ":")
+  if l && r do " style=\"text-align:center\""
+  else if r do " style=\"text-align:right\""
+  else if l do " style=\"text-align:left\""
+  else "" end end end
+end
+
+-- nth alignment style for a column (empty string past the end of the sep row).
+pfn align_at(aligns : List(String), i : Int) : String do
+  match aligns do
+  Nil -> ""
+  Cons(h, t) -> if i <= 0 do h else align_at(t, i - 1) end
+  end
+end
+
+-- Render one row of cells as <th>/<td> with per-column alignment.
+-- `tag` is "th" or "td".  Cells are rendered through render_inline.
+pfn render_cells(cells : List(String), aligns : List(String), i : Int, tag : String, out : List(String)) : List(String) do
+  match cells do
+  Nil -> out
+  Cons(cell, rest) ->
+    let a = align_at(aligns, i)
+    let html = "<" ++ tag ++ a ++ ">" ++ render_inline(cell) ++ "</" ++ tag ++ ">"
+    render_cells(rest, aligns, i + 1, tag, Cons(html, out))
+  end
+end
+
+fn render_row(cells : List(String), aligns : List(String), tag : String) : String do
+  "<tr>" ++ String.join(List.reverse(render_cells(cells, aligns, 0, tag, Nil)), "") ++ "</tr>"
+end
+
+-- Collect consecutive body rows (lines that contain "|") into a list of
+-- rendered <tr>…</tr> strings.  Stops at the first line without a "|".
+-- Returns (body_html, remaining_lines).
+pfn collect_table_rows(lines : List(String), aligns : List(String), out : List(String)) : (List(String), List(String)) do
+  match lines do
+  Nil -> (List.reverse(out), Nil)
+  Cons(line, rest) ->
+    let t = String.trim(line)
+    if String.is_empty(t) do (List.reverse(out), lines)
     else
-      -- Unordered list
-      if is_ul_item(t) do
-        let flushed = flush_para(buf, out)
-        let (items, rest2) = collect_ul(rest, Cons(list_item_text(t), Nil))
-        let html = "<ul>" ++ render_list_items(items) ++ "</ul>"
-        go(rest2, Nil, Cons(html, flushed), false)
-      else
-        -- Ordered list
-        if is_ol_item(t) do
+      if String.contains(t, "|") do
+        let row = render_row(split_cells(t), aligns, "td")
+        collect_table_rows(rest, aligns, Cons(row, out))
+      else (List.reverse(out), lines) end
+    end
+  end
+end
+
+-- Build the full <table> HTML from the header line, separator line, and the
+-- following body lines.  Returns (table_html, remaining_lines).
+fn build_table(header_line : String, sep_line : String, body_lines : List(String)) : (String, List(String)) do
+  let aligns = List.map(split_cells(String.trim(sep_line)), fn c -> cell_align(c))
+  let head = render_row(split_cells(String.trim(header_line)), aligns, "th")
+  let (rows, rest) = collect_table_rows(body_lines, aligns, Nil)
+  let body = String.join(rows, "")
+  let html = "<table class=\"md-table\"><thead>" ++ head ++ "</thead><tbody>" ++ body ++ "</tbody></table>"
+  -- NB: bind the tuple to `result` — a bare `(html, rest)` on its own line
+  -- after an expression is parsed as function application `html(rest)`.
+  let result = (html, rest)
+  result
+end
+
+-- ── Fenced code ──────────────────────────────────────────────────────────────
+
+-- Extract the language token from a fence open line like "```rust".
+-- Drops the leading ``` and trims; "" when no language is given.
+fn fence_lang(t : String) : String do
+  if String.byte_size(t) >= 3 do String.trim(drop_prefix(t, "```")) else "" end
+end
+
+-- Open a <pre><code …> with an optional language class.
+fn code_open(lang : String) : String do
+  if String.is_empty(lang) do "<pre><code>"
+  else "<pre><code class=\"language-" ++ html_escape(lang) ++ "\">" end
+end
+
+-- Collect the lines of a fenced code block until the closing ``` fence.
+-- Returns (code_lines_in_document_order, remaining_lines_after_fence).
+-- If the closing fence is missing, all remaining lines become the block.
+pfn collect_fence(lines : List(String), acc : List(String)) : (List(String), List(String)) do
+  match lines do
+  Nil -> (List.reverse(acc), Nil)
+  Cons(line, rest) ->
+    if String.trim(line) == "```" do (List.reverse(acc), rest)
+    else collect_fence(rest, Cons(line, acc)) end
+  end
+end
+
+-- Render a fenced code block body to the inner HTML of <pre><code>.
+-- With a language we syntax-highlight (tokens escaped + spanned); without one
+-- we simply html_escape the verbatim text.  Highlight.highlight guarantees the
+-- output is html-escaped, so unescaped source can never reach the page.
+fn code_body(lang : String, code : String) : String do
+  if String.is_empty(String.trim(lang)) do html_escape(code)
+  else Highlight.highlight(lang, code) end
+end
+
+-- Emit a complete fenced code block as one HTML fragment.
+fn render_fence(lang : String, code_lines : List(String)) : String do
+  let code = String.join(code_lines, "\n")
+  code_open(lang) ++ code_body(lang, code) ++ "</code></pre>"
+end
+
+-- Main markdown-to-HTML loop lifted to a top-level pfn to avoid Perceus RC
+-- underflow when a self-capturing recursive closure is passed as a callback
+-- and re-invoked inside the callee. All block-level dispatch is inlined here.
+--
+-- Fenced code blocks are collected eagerly (collect_fence) rather than tracked
+-- with a streaming code_mode flag, so the fence language is available when the
+-- block is rendered/highlighted.
+pfn md_go(ls : List(String), buf : List(String), out : List(String)) : String do
+  match ls do
+  Nil ->
+    String.join(List.reverse(flush_para(buf, out)), "")
+  Cons(line, rest) ->
+    -- Precompute line-dependent values before String.trim(line) so Perceus
+    -- sees all uses of `line` before the trim and doesn't insert dec_rc line
+    -- prematurely (which would cause use-after-free in the indented-code arm).
+    let maybe_stripped = if is_indented_code(line) do Some(drop_prefix(line, "  ")) else None end
+    -- `has_pipe` is a *borrow* of `line` (String.contains does not consume it),
+    -- computed before String.trim(line) takes ownership.  This is the only
+    -- table-relevant fact we can extract from `line` without touching `rest`.
+    let has_pipe = String.contains(line, "|")
+    let t = String.trim(line)
+    if is_fence(t) do
+      let lang = fence_lang(t)
+      let flushed = flush_para(buf, out)
+      let (code_lines, rest2) = collect_fence(rest, Nil)
+      md_go(rest2, Nil, Cons(render_fence(lang, code_lines), flushed))
+    else
+      -- Table detection consumes `rest` exactly once via this match: a table
+      -- start is `has_pipe` AND the next line (rest's head) is a separator.
+      -- Every non-table arm rebuilds `Cons(next, more)` so `rest` flows on
+      -- unchanged, keeping `rest` used exactly once per control path (avoids
+      -- the Perceus RC underflow a second peek-then-match would cause).
+      match rest do
+      Cons(next, more) ->
+        if has_pipe && is_table_separator(String.trim(next)) do
           let flushed = flush_para(buf, out)
-          let (items, rest2) = collect_ol(rest, Cons(list_item_text(t), Nil))
-          let html = "<ol>" ++ render_list_items(items) ++ "</ol>"
-          go(rest2, Nil, Cons(html, flushed), false)
+          let (table_html, rest2) = build_table(t, next, more)
+          md_go(rest2, Nil, Cons(table_html, flushed))
         else
-          -- Blockquote / admonition
-          if is_admonition(t) do
-            let flushed = flush_para(buf, out)
-            let (items, rest2) = collect_blockquote(rest, Cons(drop_prefix(t, "> "), Nil))
-            let html = render_admonition(items)
-            go(rest2, Nil, Cons(html, flushed), false)
-          else
-            match md_heading(t) do
-            Some((tag, content)) ->
-              let close = String.replace_all(tag, "<", "</")
-              let flushed = flush_para(buf, out)
-              let hnode = Cons(close, Cons(html_escape(content), Cons(tag, flushed)))
-              go(rest, Nil, hnode, false)
-            None ->
-              go(rest, Cons(t, buf), out, false)
-            end
-          end
+          md_go_block(t, maybe_stripped, buf, out, Cons(next, more))
         end
+      Nil ->
+        md_go_block(t, maybe_stripped, buf, out, Nil)
       end
     end
   end
 end
 
+-- Block-level dispatch for a single non-fence, non-table line.  Split out of
+-- md_go so the table `match rest` above stays a single, self-contained consume
+-- of `rest`.  `t` is the trimmed line; `rest` is the remaining document.
+pfn md_go_block(t : String, maybe_stripped : Option(String), buf : List(String), out : List(String), rest : List(String)) : String do
+      if String.is_empty(t) do md_go(rest, Nil, flush_para(buf, out))
+      else
+        if is_ul_item(t) do
+          let flushed = flush_para(buf, out)
+          let (items, rest2) = collect_ul(rest, Cons(list_item_text(t), Nil))
+          md_go(rest2, Nil, Cons("<ul>" ++ render_list_items(items) ++ "</ul>", flushed))
+        else
+          if is_ol_item(t) do
+            let flushed = flush_para(buf, out)
+            let (items, rest2) = collect_ol(rest, Cons(list_item_text(t), Nil))
+            md_go(rest2, Nil, Cons("<ol>" ++ render_list_items(items) ++ "</ol>", flushed))
+          else
+            if is_admonition(t) do
+              let flushed = flush_para(buf, out)
+              let (items, rest2) = collect_blockquote(rest, Cons(drop_prefix(t, "> "), Nil))
+              md_go(rest2, Nil, Cons(render_admonition(items), flushed))
+            else
+              match md_heading(t) do
+              Some(heading_html) ->
+                let flushed = flush_para(buf, out)
+                md_go(rest, Nil, Cons(heading_html, flushed))
+              None ->
+                if List.is_empty(buf) do
+                  match maybe_stripped do
+                  Some(stripped) ->
+                    let (code_lines, rest2) = collect_indented(rest, Cons(stripped, Nil))
+                    let code = html_escape(String.join(code_lines, "\n"))
+                    md_go(rest2, Nil, Cons("<pre><code>" ++ code ++ "</code></pre>", out))
+                  None ->
+                    md_go(rest, Cons(t, buf), out)
+                  end
+                else
+                  md_go(rest, Cons(t, buf), out)
+                end
+              end
+            end
+          end
+        end
+      end
+end
+
 fn md_to_html(md : String) : String do
-  let lines = String.split(md, "\n")
-  fn go(ls, buf, out, code_mode) do
-    match ls do
-    Nil ->
-      let out2 = if code_mode do flush_code(buf, out) else flush_para(buf, out) end
-      String.join(List.reverse(out2), "")
-    Cons(line, rest) ->
-      if code_mode do md_step_code(line, rest, buf, out, go)
-      else md_step_text(line, rest, buf, out, go) end
-    end
-  end
-  go(lines, Nil, Nil, false)
+  md_go(String.split(md, "\n"), Nil, Nil)
 end
 
 end
