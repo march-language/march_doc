@@ -9,6 +9,11 @@
 
 mod MarchDocTask do
 
+needs IO.Console
+needs IO.FileRead
+needs IO.FileWrite
+needs IO.Process
+
 -- ── Arg parsing ──────────────────────────────────────────────────────────────
 
 -- Parse FORGE_TASK_ARGS (newline-separated) into a list of strings.
@@ -85,7 +90,10 @@ end
 
 -- ── Main ─────────────────────────────────────────────────────────────────────
 
-fn main() do
+-- The capability parameters are the program's grant (march >= 2026-08 strict
+-- grant rule): the doc generator reads sources, writes HTML, logs, and exits.
+fn main(_cap_console : Cap(IO.Console), _cap_fileread : Cap(IO.FileRead),
+        _cap_filewrite : Cap(IO.FileWrite), _cap_process : Cap(IO.Process)) do
   let args = parse_task_args()
   let stdlib_only = has_flag(args, "--stdlib")
   if stdlib_only do
