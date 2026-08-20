@@ -1,6 +1,7 @@
 -- Guides — discover and render guides/*.md into HTML pages.
 
 mod Guides do
+    needs IO.FileRead
 
   import DocHtml
 

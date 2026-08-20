@@ -1,6 +1,7 @@
 -- Tests for the Parser module.
 
 mod TestParser do
+  needs IO.FileWrite
 
 -- Helper: write a temp file and parse it
 fn parse_src(name, src, include_private) do

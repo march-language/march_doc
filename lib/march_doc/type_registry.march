@@ -5,27 +5,39 @@ mod TypeRegistry do
 -- TypeRef(type_name, module_name, anchor)
 type TypeRef = TypeRef(String, String, String)
 
+-- Lifted to pfn to avoid FBIP closure-capture RC bug: List.map with a lambda
+-- that captures mod_name and consumes it (passing to TypeRef constructor) causes
+-- the closure cleanup to double-free mod_name after the map completes.
+pfn type_entry_refs_go(entries : List(TypeEntry), mod_name : String, acc : List(TypeRef)) : List(TypeRef) do
+  match entries do
+  Nil -> List.reverse(acc)
+  Cons(entry, rest) ->
+    let ref = match entry do
+      TypeEntry(name, _, _, _) -> TypeRef(name, mod_name, "type-" ++ name)
+    end
+    type_entry_refs_go(rest, mod_name, Cons(ref, acc))
+  end
+end
+
+pfn iface_entry_refs_go(entries : List(IfaceEntry), mod_name : String, acc : List(TypeRef)) : List(TypeRef) do
+  match entries do
+  Nil -> List.reverse(acc)
+  Cons(entry, rest) ->
+    let ref = match entry do
+      IfaceEntry(name, _, _, _, _) -> TypeRef(name, mod_name, "iface-" ++ name)
+    end
+    iface_entry_refs_go(rest, mod_name, Cons(ref, acc))
+  end
+end
+
 -- Build a registry of all type and interface names across modules.
 fn build_registry(modules : List(ModuleInfo)) : List(TypeRef) do
   List.flat_map(modules, fn info ->
     match info do
     ModuleInfo(mod_name, _, _, types, ifaces, _) ->
-      let type_refs = List.map(types, fn entry ->
-        match entry do
-        TypeEntry(name, _, _, _) ->
-          TypeRef(name, mod_name, "type-" ++ name)
-        _ -> TypeRef("", "", "")
-        end
-      )
-      let iface_refs = List.map(ifaces, fn entry ->
-        match entry do
-        IfaceEntry(name, _, _, _, _) ->
-          TypeRef(name, mod_name, "iface-" ++ name)
-        _ -> TypeRef("", "", "")
-        end
-      )
+      let type_refs = type_entry_refs_go(types, mod_name, Nil)
+      let iface_refs = iface_entry_refs_go(ifaces, mod_name, Nil)
       List.append(type_refs, iface_refs)
-    _ -> Nil
     end
   )
 end
@@ -70,40 +82,84 @@ end
 
 -- Tokenize a signature string into words and delimiters.
 -- Returns a list of tokens (words and individual punctuation chars).
+-- Lifted to pfn to avoid Perceus RC underflow from closure-capture RC bugs.
+-- Restructured to avoid identity-binding of acc (let acc2 = acc → SIGILL pattern).
+pfn tokenize_sig_go(s : String, i : Int, n : Int, start : Int, acc : List(String)) : List(String) do
+  if i >= n do
+    if i > start do List.reverse(Cons(String.slice(s, start, i - start), acc))
+    else List.reverse(acc) end
+  else
+    let ch = String.slice(s, i, 1)
+    if is_delim(ch) do
+      if i > start do
+        tokenize_sig_go(s, i + 1, n, i + 1, Cons(ch, Cons(String.slice(s, start, i - start), acc)))
+      else
+        tokenize_sig_go(s, i + 1, n, i + 1, Cons(ch, acc))
+      end
+    else tokenize_sig_go(s, i + 1, n, start, acc) end
+  end
+end
+
 fn tokenize_sig(s) do
-  fn go(i, n, start, acc) do
-    if i >= n do
-      if i > start do List.reverse(Cons(String.slice(s, start, i - start), acc))
-      else List.reverse(acc) end
-    else
-      let ch = String.slice(s, i, 1)
-      if is_delim(ch) do
-        let acc2 = if i > start do Cons(String.slice(s, start, i - start), acc) else acc end
-        go(i + 1, n, i + 1, Cons(ch, acc2))
-      else go(i + 1, n, start, acc) end
+  tokenize_sig_go(s, 0, String.byte_size(s), 0, Nil)
+end
+
+-- Walk the registry for a matching type and return its href (a freshly-built
+-- string), or "" when the token is not a known type.
+--
+-- The "" sentinel (instead of Option(TypeRef)/Option(String)) is load-bearing
+-- for CORRECTNESS, not style. `registry` is traversed by ownership (any
+-- recursive list walk is `:own` in March), and `render_module` uses the same
+-- registry 4 times (types/ifaces/pub/prv passes), so Perceus inc_rc's the head
+-- and the spine becomes shared. The original `find_ref` returned `Some(ref)` and
+-- its not-found `Nil` branch compiled to `reuse registry as None` — FBIP reusing
+-- the (under-counted, actually-shared) Nil spine cell as the None allocation.
+-- That write corrupts the spine for the next pass, so a later `find_ref` walks a
+-- cyclic/garbage list forever (the page-generation hang).
+--
+-- Returning a static "" gives the not-found branch nothing to allocate, so FBIP
+-- emits a plain `dec_rc registry` with NO `reuse` — and a plain dec of a shared
+-- cell is sound. (Verified via `march --dump-tir`: no `reuse` in this function.)
+pfn lookup_href(name : String, registry : List(TypeRef), current_module : String) : String do
+  match registry do
+  Nil -> ""
+  Cons(ref, rest) ->
+    match ref do
+    TypeRef(n, mod_name, anchor) ->
+      if n == name do
+        if mod_name == current_module do "#" ++ anchor
+        else mod_name ++ ".html#" ++ anchor end
+      else lookup_href(name, rest, current_module) end
     end
   end
-  go(0, String.byte_size(s), 0, Nil)
+end
+
+-- Linkify a single token against the registry.
+fn linkify_one_token(tok : String, registry : List(TypeRef), current_module : String) : String do
+  if is_type_token(tok) do
+    let href = lookup_href(tok, registry, current_module)
+    if String.is_empty(href) do Markdown.html_escape(tok)
+    else "<a href=\"" ++ Markdown.html_escape(href) ++ "\">" ++ Markdown.html_escape(tok) ++ "</a>" end
+  else Markdown.html_escape(tok) end
+end
+
+-- Explicit tail-recursive loop to linkify all tokens.
+-- Lifted to pfn to avoid FBIP closure-capture RC bug when passing
+-- registry across multiple List.map iterations.
+pfn linkify_tokens_go(tokens : List(String), registry : List(TypeRef), current_module : String, acc : List(String)) : List(String) do
+  match tokens do
+  Nil -> List.reverse(acc)
+  Cons(tok, rest) ->
+    let part = linkify_one_token(tok, registry, current_module)
+    linkify_tokens_go(rest, registry, current_module, Cons(part, acc))
+  end
 end
 
 -- Linkify type names in a signature string.
 -- Known types become <a> links; everything else is HTML-escaped.
 fn linkify_signature(signature : String, registry : List(TypeRef), current_module : String) : String do
   let tokens = tokenize_sig(signature)
-  let parts = List.map(tokens, fn tok ->
-    if is_type_token(tok) do
-      match find_ref(tok, registry) do
-      None -> Markdown.html_escape(tok)
-      Some(ref) ->
-        match ref do
-        TypeRef(_, mod_name, anchor) ->
-          let href = if mod_name == current_module do "#" ++ anchor
-            else mod_name ++ ".html#" ++ anchor end
-          "<a href=\"" ++ Markdown.html_escape(href) ++ "\">" ++ Markdown.html_escape(tok) ++ "</a>"
-        end
-      end
-    else Markdown.html_escape(tok) end
-  )
+  let parts = linkify_tokens_go(tokens, registry, current_module, Nil)
   String.join(parts, "")
 end
 

@@ -1,6 +1,7 @@
 -- Parser — extract doc entries from March source files.
 
 mod Parser do
+    needs IO.FileRead
 
 -- ── Types ────────────────────────────────────────────────────────────────────
 
@@ -113,16 +114,28 @@ fn parse_module_comment(lines) do
   go(lines, Nil)
 end
 
--- Extract the doc text from a single-line: doc "text"
+-- Find the byte index of the first occurrence of ch in s at or after start.
+-- Returns -1 if not found. Lifted to pfn to avoid closure-capture RC bugs.
+pfn find_char(s : String, ch : String, i : Int) : Int do
+  if i >= String.byte_size(s) do -1
+  else
+    if String.slice(s, i, 1) == ch do i
+    else find_char(s, ch, i + 1) end
+  end
+end
+
+-- Extract the doc text from a single-line: doc "text".
+-- Caller must pass a pre-trimmed line (already verified to start with doc ").
+-- Avoids String.split_first to prevent FBIP RC crash on Option((String,String)).
 fn extract_single_doc(line) do
-  let t = String.trim(line)
-  match String.split_first(t, "\"") do
-  None -> ""
-  Some((_, after)) ->
-    match String.split_first(after, "\"") do
-    None -> after
-    Some((content, _)) -> content
-    end
+  let n = String.byte_size(line)
+  let open_q = find_char(line, "\"", 0)
+  if open_q < 0 do ""
+  else
+    let start = open_q + 1
+    let close_q = find_char(line, "\"", start)
+    if close_q < 0 do String.slice(line, start, n - start)
+    else String.slice(line, start, close_q - start) end
   end
 end
 
@@ -288,28 +301,31 @@ fn process_line(line, pending, fns, types, ifaces, include_private, line_num, mo
   end
 end
 
--- Walk lines extracting doc + fn/type/interface entries.
-fn parse_entries(lines, include_private, mod_indent) do
-  fn go(ls, pending, fns, types, ifaces, line_num) do
-    match ls do
-    Nil ->
-      (List.reverse(fns), List.reverse(types), List.reverse(ifaces))
-    Cons(line, rest) ->
-      do
-        let t = String.trim(line)
-        if String.starts_with(t, "doc \"\"\"") do
-          let (doc_text, rest2) = collect_triple_doc(rest)
-          let skip = List.length(lines) - List.length(rest2) - line_num + 1
-          go(rest2, Some(doc_text), fns, types, ifaces, line_num + skip)
-        else
-          let (pending2, fns2, types2, ifaces2, _) =
-            process_line(line, pending, fns, types, ifaces, include_private, line_num, mod_indent)
-          go(rest, pending2, fns2, types2, ifaces2, line_num + 1)
-        end
-      end
+-- Inner loop for parse_entries; lifted to top-level pfn to avoid Perceus RC
+-- underflow from the self-capturing recursive closure pattern.
+-- skip = List.length(rest) - List.length(rest2) + 1 replaces the original
+-- List.length(lines) - List.length(rest2) - line_num + 1 to avoid passing `lines`.
+pfn parse_entries_go(include_private : Bool, mod_indent : Int, ls : List(String), pending : Option(String), fns : List(FnEntry), types : List(TypeEntry), ifaces : List(IfaceEntry), line_num : Int) : (List(FnEntry), List(TypeEntry), List(IfaceEntry)) do
+  match ls do
+  Nil ->
+    (List.reverse(fns), List.reverse(types), List.reverse(ifaces))
+  Cons(line, rest) ->
+    let t = String.trim(line)
+    if String.starts_with(t, "doc \"\"\"") do
+      let (doc_text, rest2) = collect_triple_doc(rest)
+      let skip = List.length(rest) - List.length(rest2) + 1
+      parse_entries_go(include_private, mod_indent, rest2, Some(doc_text), fns, types, ifaces, line_num + skip)
+    else
+      let (pending2, fns2, types2, ifaces2, _) =
+        process_line(line, pending, fns, types, ifaces, include_private, line_num, mod_indent)
+      parse_entries_go(include_private, mod_indent, rest, pending2, fns2, types2, ifaces2, line_num + 1)
     end
   end
-  go(lines, None, Nil, Nil, Nil, 1)
+end
+
+-- Walk lines extracting doc + fn/type/interface entries.
+fn parse_entries(lines, include_private, mod_indent) do
+  parse_entries_go(include_private, mod_indent, lines, None, Nil, Nil, Nil, 1)
 end
 
 -- Parse a .march file into a ModuleInfo (or None if unparseable).
@@ -321,7 +337,8 @@ fn parse_file(path : String, include_private : Bool) : Option(ModuleInfo) do
       let lines = String.split(src, "\n")
       let mod_name = parse_module_name(lines)
       let mod_comment = parse_module_comment(lines)
-      let (fns, types, ifaces) = parse_entries(lines, include_private, module_indent(lines))
+      let mi = module_indent(lines)
+      let (fns, types, ifaces) = parse_entries(lines, include_private, mi)
       if mod_name == "Unknown" && List.is_empty(fns) && List.is_empty(types) do
         None
       else

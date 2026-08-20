@@ -67,7 +67,6 @@ fn render_fn_section(entry) do
       ), "\n\n")
       header ++ prose ++ code ++ "\n\n"
     end
-  _ -> ""
   end
 end
 
@@ -84,7 +83,6 @@ fn render_type_section(entry) do
       ), "\n\n")
       header ++ code ++ "\n\n"
     end
-  _ -> ""
   end
 end
 
@@ -113,7 +111,6 @@ fn render_module(info : ModuleInfo) : Option((String, String)) do
         String.join(fn_sections, "")
       Some((mod_name ++ ".scroll.md", body))
     end
-  _ -> None
   end
 end
 
