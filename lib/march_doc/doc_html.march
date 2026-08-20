@@ -369,7 +369,6 @@ fn sidebar_nav(modules : List(ModuleInfo)) : String do
         TypeEntry(name, _, _, _) ->
           "<a class=\"sl\" href=\"" ++ href ++ "#type-" ++ Markdown.html_escape(name) ++ "\">" ++
           "<span class=\"sb-kind\" style=\"color:var(--ty)\">T</span>" ++ Markdown.html_escape(name) ++ "</a>"
-        _ -> ""
         end
       )
       let iface_items = List.map(ifaces, fn e ->
@@ -377,7 +376,6 @@ fn sidebar_nav(modules : List(ModuleInfo)) : String do
         IfaceEntry(name, _, _, _, _) ->
           "<a class=\"sl\" href=\"" ++ href ++ "#iface-" ++ Markdown.html_escape(name) ++ "\">" ++
           "<span class=\"sb-kind\" style=\"color:var(--if)\">I</span>" ++ Markdown.html_escape(name) ++ "</a>"
-        _ -> ""
         end
       )
       let pub_fns = sort_fns(List.filter(fns, Parser.is_pub))
@@ -386,7 +384,6 @@ fn sidebar_nav(modules : List(ModuleInfo)) : String do
         FnEntry(name, _, _, _, _) ->
           "<a class=\"sl\" href=\"" ++ href ++ "#fn-" ++ Markdown.html_escape(name) ++ "\">" ++
           "<span class=\"sb-kind\" style=\"color:var(--fn)\">F</span>" ++ Markdown.html_escape(name) ++ "</a>"
-        _ -> ""
         end
       )
       let all_sub = List.append(type_items, List.append(iface_items, fn_items))
@@ -397,7 +394,6 @@ fn sidebar_nav(modules : List(ModuleInfo)) : String do
       "<span class=\"sb-chevron\">&#9656;</span>" ++
       "<a class=\"sl\" href=\"" ++ href ++ "\">" ++ esc_name ++ "</a>" ++
       "</div>" ++ sub_html ++ "</div>"
-    _ -> ""
     end
   )
   String.join(groups, "\n")
@@ -558,7 +554,6 @@ fn render_module(info : ModuleInfo, sidebar : String, registry : List(TypeRef), 
       else "<h2>Private</h2>" ++ String.join(prv_items, "\n") end
     let content = title_html ++ comment_html ++ types_html ++ ifaces_html ++ pub_html ++ prv_html
     page(mod_name, sidebar, false, content)
-  _ -> ""
   end
 end
 

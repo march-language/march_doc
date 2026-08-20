@@ -1,6 +1,7 @@
 -- Discovery — find .march source files in directories.
 
 mod Discovery do
+    needs IO.FileRead
 
 fn walk_march_files(dir : String) : List(String) do
   match Dir.list(dir) do

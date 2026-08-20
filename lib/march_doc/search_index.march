@@ -24,39 +24,57 @@ fn entry(mod_name, kind, name, signature, doc_opt) do
   ])
 end
 
+-- Explicit pfn loops instead of List.map with capturing lambdas. A lambda that
+-- captures `mod_name` is freed by FBIP after the first iteration, dec'ing the
+-- captured `mod_name`; later iterations then read a freed string and the march
+-- string primitives loop forever on its garbage length. Passing mod_name as an
+-- explicit pfn parameter avoids the capture entirely.
+pfn fn_entries_go(fns : List(FnEntry), mod_name : String, acc) do
+  match fns do
+  Nil -> List.reverse(acc)
+  Cons(e, rest) ->
+    let je = match e do
+      FnEntry(name, dsig, doc_opt, is_private, _) ->
+        let kind = if is_private do "pfn" else "fn" end
+        entry(mod_name, kind, name, dsig, doc_opt)
+    end
+    fn_entries_go(rest, mod_name, Cons(je, acc))
+  end
+end
+
+pfn type_entries_go(types : List(TypeEntry), mod_name : String, acc) do
+  match types do
+  Nil -> List.reverse(acc)
+  Cons(e, rest) ->
+    let je = match e do
+      TypeEntry(name, dsig, doc_opt, _) ->
+        let kind = if String.starts_with(dsig, "ptype") do "ptype" else "type" end
+        entry(mod_name, kind, name, dsig, doc_opt)
+    end
+    type_entries_go(rest, mod_name, Cons(je, acc))
+  end
+end
+
+pfn iface_entries_go(ifaces : List(IfaceEntry), mod_name : String, acc) do
+  match ifaces do
+  Nil -> List.reverse(acc)
+  Cons(e, rest) ->
+    let je = match e do
+      IfaceEntry(name, dsig, doc_opt, _, _) ->
+        entry(mod_name, "interface", name, dsig, doc_opt)
+    end
+    iface_entries_go(rest, mod_name, Cons(je, acc))
+  end
+end
+
 fn module_entries(info) do
   match info do
     ModuleInfo(mod_name, comment_opt, fns, types, ifaces, _) ->
       let mod_entry = entry(mod_name, "module", mod_name, "", comment_opt)
-
-      let fn_entries = List.map(fns, fn e ->
-        match e do
-          FnEntry(name, dsig, doc_opt, is_private, _) ->
-            let kind = if is_private do "pfn" else "fn" end
-            entry(mod_name, kind, name, dsig, doc_opt)
-          _ -> Json.Object([])
-        end
-      )
-
-      let type_entries = List.map(types, fn e ->
-        match e do
-          TypeEntry(name, dsig, doc_opt, _) ->
-            let kind = if String.starts_with(dsig, "ptype") do "ptype" else "type" end
-            entry(mod_name, kind, name, dsig, doc_opt)
-          _ -> Json.Object([])
-        end
-      )
-
-      let iface_entries = List.map(ifaces, fn e ->
-        match e do
-          IfaceEntry(name, dsig, doc_opt, _, _) ->
-            entry(mod_name, "interface", name, dsig, doc_opt)
-          _ -> Json.Object([])
-        end
-      )
-
+      let fn_entries = fn_entries_go(fns, mod_name, Nil)
+      let type_entries = type_entries_go(types, mod_name, Nil)
+      let iface_entries = iface_entries_go(ifaces, mod_name, Nil)
       Cons(mod_entry, List.append(fn_entries, List.append(type_entries, iface_entries)))
-    _ -> Nil
   end
 end
 

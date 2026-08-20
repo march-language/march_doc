@@ -1,6 +1,8 @@
 -- Integration tests: full MarchDoc.generate pipeline.
 
 mod TestIntegration do
+  needs IO.FileRead
+  needs IO.FileWrite
 
 -- Shared setup helper: write source, generate docs, return output dir
 fn setup_and_generate(name, files, include_private) do
