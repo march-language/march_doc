@@ -4,6 +4,10 @@
 --   forge march_doc.doc    generate docs to docs/{package_name}/
 
 mod MarchDoc do
+    needs IO.Process
+    needs IO.FileWrite
+    needs IO.FileRead
+    needs IO.Console
 
   import DocHtml
 
