@@ -1,6 +1,6 @@
 [package]
 name = "march-doc"
-version = "0.1.1"
+version = "0.1.2"
 type = "tool"
 description = "HTML documentation generator for March projects"
 author = "March Contributors"
