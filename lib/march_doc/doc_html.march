@@ -168,12 +168,15 @@ end
 fn page_js() : String do
   IOList.to_string(~H"""
 /* Theme toggle */
-function getTheme(){var t=localStorage.getItem('march-doc-theme');
+/* localStorage throws in sandboxed (opaque-origin) pages, e.g. registry-hosted docs */
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function getTheme(){var t=lsGet('march-doc-theme');
 if(t)return t;return window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';}
 function applyTheme(t){document.documentElement.setAttribute('data-theme',t);
 var moon=document.getElementById('icon-moon'),sun=document.getElementById('icon-sun');
 if(moon&&sun){moon.style.display=t==='dark'?'block':'none';sun.style.display=t==='light'?'block':'none';}}
-function toggleTheme(){var t=getTheme()==='dark'?'light':'dark';localStorage.setItem('march-doc-theme',t);applyTheme(t);}
+function toggleTheme(){var t=getTheme()==='dark'?'light':'dark';lsSet('march-doc-theme',t);applyTheme(t);}
 applyTheme(getTheme());
 
 /* Search overlay */

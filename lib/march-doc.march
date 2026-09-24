@@ -28,6 +28,36 @@ pfn gen_module_pages(modules, output_dir, sidebar, registry, source_url) do
   end
 end
 
+-- The project root for a list of source dirs: the parent of the first one
+-- (lib/ -> project root). Guides live in <root>/guides and source links are
+-- made relative to it.
+pfn project_root_of(src_dirs : List(String)) : String do
+  match List.head_opt(src_dirs) do
+  None -> "."
+  Some(d) ->
+    let parts = String.split(d, "/")
+    String.join(List.reverse(List.tail(List.reverse(parts))), "/")
+  end
+end
+
+-- file_path relative to root (as a {path} in a source_url should be: the
+-- path inside the repository, not wherever the sources were unpacked).
+fn relative_path(root : String, file_path : String) : String do
+  let prefix = root ++ "/"
+  if root != "" && String.starts_with(file_path, prefix) do
+    String.slice_bytes(file_path, String.byte_size(prefix), String.byte_size(file_path) - String.byte_size(prefix))
+  else if String.starts_with(file_path, "./") do
+    String.slice_bytes(file_path, 2, String.byte_size(file_path) - 2)
+  else file_path
+  end end
+end
+
+pfn relativize_module(root : String, info : ModuleInfo) : ModuleInfo do
+  match info do
+  ModuleInfo(n, c, fns, types, ifaces, path) -> ModuleInfo(n, c, fns, types, ifaces, relative_path(root, path))
+  end
+end
+
 -- Generate HTML documentation for all .march files in the given directories.
 -- source_url is an optional URL pattern with {path} and {line} placeholders for source links.
 fn generate(src_dirs : List(String), output_dir : String, include_private : Bool, source_url : Option(String)) : () do
@@ -37,8 +67,10 @@ fn generate(src_dirs : List(String), output_dir : String, include_private : Bool
   )
   IO.warn("march_doc: parsing " ++ String.from_int(List.length(all_files)) ++ " source files...")
   let raw_modules = List.filter_map(all_files, fn path -> Parser.parse_file(path, include_private))
-  let modules = List.sort_by(raw_modules, fn (a, b) ->
-    Parser.info_name(a) < Parser.info_name(b)
+  let project_root = project_root_of(src_dirs)
+  let modules = List.map(
+    List.sort_by(raw_modules, fn (a, b) -> Parser.info_name(a) < Parser.info_name(b)),
+    fn m -> relativize_module(project_root, m)
   )
   IO.warn("march_doc: generating " ++ String.from_int(List.length(modules)) ++ " module pages...")
   match Dir.mkdir_p(output_dir) do
@@ -49,13 +81,6 @@ fn generate(src_dirs : List(String), output_dir : String, include_private : Bool
   end
 
   -- Discover guides
-  let project_root = match List.head_opt(src_dirs) do
-    None -> "."
-    Some(d) ->
-      -- Go up one level from lib/ to project root
-      let parts = String.split(d, "/")
-      String.join(List.reverse(List.tail(List.reverse(parts))), "/")
-  end
   let guides_dir = project_root ++ "/guides"
   let guide_files = Guides.discover(guides_dir)
   -- Build combined sidebar: guides (if any) + hierarchical modules
