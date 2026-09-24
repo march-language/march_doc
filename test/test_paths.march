@@ -1,0 +1,38 @@
+-- Tests for MarchDoc.relative_path (source links are relative to the project
+-- root, not to wherever the sources were unpacked) and the sandbox-safe theme
+-- JS (registry-hosted docs run in an opaque origin where localStorage throws).
+
+mod TestPaths do
+
+describe "MarchDoc.relative_path" do
+
+  test "strips the project root prefix" do
+    assert (MarchDoc.relative_path("/tmp/work/pkg", "/tmp/work/pkg/lib/foo.march") == "lib/foo.march")
+  end
+
+  test "leaves paths outside the root unchanged" do
+    assert (MarchDoc.relative_path("/tmp/work/pkg", "/elsewhere/foo.march") == "/elsewhere/foo.march")
+  end
+
+  test "does not strip a root that is only a name prefix" do
+    assert (MarchDoc.relative_path("/tmp/pkg", "/tmp/pkg2/lib/foo.march") == "/tmp/pkg2/lib/foo.march")
+  end
+
+  test "strips a leading ./ for an empty root" do
+    assert (MarchDoc.relative_path("", "./lib/foo.march") == "lib/foo.march")
+  end
+
+end
+
+describe "DocHtml.page_js" do
+
+  test "never touches localStorage outside a try/catch" do
+    let js = DocHtml.page_js()
+    assert (String.contains(js, "try{return localStorage.getItem(k);}catch(e){return null;}"))
+    assert (String.contains(js, "try{localStorage.setItem(k,v);}catch(e){}"))
+    assert (!String.contains(js, "var t=localStorage"))
+  end
+
+end
+
+end
