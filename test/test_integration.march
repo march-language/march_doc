@@ -83,7 +83,7 @@ describe "Integration" do
       let html = read_file(out ++ "/DocMod.html")
       assert (String.contains(html, "This function does something"))
       assert (String.contains(html, "<pre><code>"))
-      assert (String.contains(html, "DocMod.greet()"))
+      assert (String.contains(html, "<span class=\"tok-ty\">DocMod</span>.greet()"))
       assert (String.contains(html, "<h3>"))
     end
 

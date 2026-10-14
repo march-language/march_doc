@@ -48,19 +48,19 @@ describe "TypeRegistry" do
 
     test "empty registry returns None" do
       let r = TypeRegistry.find_ref("Foo", Nil)
-      assert (r == None)
+      assert (Option.is_none(r))
     end
 
     test "finds existing type by name" do
       let reg = Cons(TypeRef("Foo", "MyMod", "type-Foo"), Nil)
       let r = TypeRegistry.find_ref("Foo", reg)
-      assert (r != None)
+      assert (Option.is_some(r))
     end
 
     test "returns None when name not present" do
       let reg = Cons(TypeRef("Foo", "MyMod", "type-Foo"), Nil)
       let r = TypeRegistry.find_ref("Bar", reg)
-      assert (r == None)
+      assert (Option.is_none(r))
     end
 
     test "finds correct ref in multi-item registry" do
@@ -68,9 +68,9 @@ describe "TypeRegistry" do
       let ra = TypeRegistry.find_ref("A", reg)
       let rb = TypeRegistry.find_ref("B", reg)
       let rc = TypeRegistry.find_ref("C", reg)
-      assert (ra != None)
-      assert (rb != None)
-      assert (rc == None)
+      assert (Option.is_some(ra))
+      assert (Option.is_some(rb))
+      assert (Option.is_none(rc))
     end
 
     test "found ref has correct module and anchor" do
@@ -143,8 +143,8 @@ describe "TypeRegistry" do
       let r = TypeRegistry.build_registry(Cons(info, Nil))
       let color_ref = TypeRegistry.find_ref("Color", r)
       let show_ref = TypeRegistry.find_ref("Show", r)
-      assert (color_ref != None)
-      assert (show_ref != None)
+      assert (Option.is_some(color_ref))
+      assert (Option.is_some(show_ref))
     end
 
     test "multiple modules all contribute to registry" do
@@ -157,8 +157,8 @@ describe "TypeRegistry" do
       let r = TypeRegistry.build_registry(Cons(m1, Cons(m2, Nil)))
       let alpha = TypeRegistry.find_ref("Alpha", r)
       let beta = TypeRegistry.find_ref("Beta", r)
-      assert (alpha != None)
-      assert (beta != None)
+      assert (Option.is_some(alpha))
+      assert (Option.is_some(beta))
     end
 
     test "module with no types or interfaces yields empty entries" do
@@ -167,7 +167,7 @@ describe "TypeRegistry" do
         Nil, Nil, "")
       let r = TypeRegistry.build_registry(Cons(info, Nil))
       let found = TypeRegistry.find_ref("f", r)
-      assert (found == None)
+      assert (Option.is_none(found))
     end
 
   end

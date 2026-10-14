@@ -726,6 +726,48 @@ describe "Parser" do
       end
     end
 
+    test "triple doc body is dedented to its own margin" do
+      let src = "mod TT do\n  doc \"\"\"\n  First para.\n\n  Second para.\n\n      code example\n  \"\"\"\n  fn documented() do 1 end\nend"
+      match parse_src("dedent", src, false) do
+        None -> assert false
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
+          match List.head_opt(fns) do
+            None -> assert false
+            Some(e) -> match e do FnEntry(_, _, d, _, _) ->
+              match d do
+                None -> assert false
+                Some(txt) ->
+                  assert (String.contains(txt, "\nSecond para."))
+                  assert (String.contains(txt, "\n  Second") == false)
+                  assert (String.contains(txt, "\n    code example"))
+              end
+            end
+          end
+        end
+      end
+    end
+
+    test "comment block directly above a type documents it" do
+      let src = "mod TC do\n  -- ---- Types ----\n\n  -- Why it failed:\n  --   Boom: it blew up.\n  type Err = Boom\n\n  -- detached\n\n  type Plain = P\nend"
+      match parse_src("tycmt", src, false) do
+        None -> assert false
+        Some(info) -> match info do ModuleInfo(_, _, _, types, _, _) ->
+          match types do
+            Cons(TypeEntry(_, _, d1, _), Cons(TypeEntry(_, _, d2, _), Nil)) ->
+              match d1 do
+                None -> assert false
+                Some(txt) ->
+                  assert (String.starts_with(txt, "Why it failed:"))
+                  assert (String.contains(txt, "Boom: it blew up."))
+                  assert (String.contains(txt, "----") == false)
+              end
+              assert (Option.is_none(d2))
+            _ -> assert false
+          end
+        end
+      end
+    end
+
     test "interface declaration" do
       match parse_src("iface", "mod IT do\ninterface Printable do\n  fn to_string(self) : String\nend\nend", false) do
         None -> assert false

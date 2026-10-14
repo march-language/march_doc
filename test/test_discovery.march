@@ -3,6 +3,8 @@
 mod TestDiscovery do
   needs IO.FileRead
   needs IO.FileWrite
+  needs IO.Console
+  needs IO.Process
 
 fn mkdirs() do
   let dirs = Cons("/tmp/march_doc_disco_flat", Cons("/tmp/march_doc_disco_nested/sub", Cons("/tmp/march_doc_disco_deep/a/b/c", Cons("/tmp/march_doc_disco_multi/src", Cons("/tmp/march_doc_disco_multi/lib", Cons("/tmp/march_doc_disco_3lev/a/b", Cons("/tmp/march_doc_disco_emptydir", Nil)))))))

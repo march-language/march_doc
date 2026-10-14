@@ -39,6 +39,13 @@ end
 
 pfn is_digit(c : String) : Bool do c >= "0" && c <= "9" end
 
+-- Does a word start with an upper-case letter?  In March that is a type,
+-- constructor or module name (`Option`, `Some`, `List.map`'s `List`).
+pfn is_upper(w : String) : Bool do
+  let c = String.slice(w, 0, 1)
+  c >= "A" && c <= "Z"
+end
+
 pfn is_alpha(c : String) : Bool do
   (c >= "a" && c <= "z") || (c >= "A" && c <= "Z")
 end
@@ -94,10 +101,15 @@ fn kw_python() do
    "True","False","async","await","match","case"]
 end
 
+-- Reserved words from the compiler's lexer (lib/lexer/lexer.mll).  Contextual
+-- words that are also common identifiers (`state`, `init`, `or`, `only`, ...)
+-- are left out so ordinary variable names are not painted as keywords.
 fn kw_march() do
-  ["mod","fn","pfn","type","ptype","actor","state","init","on","let","if",
-   "else","do","end","match","use","import","spawn","send","receive","return",
-   "true","false"]
+  ["mod","fn","pfn","type","ptype","actor","on","let","if","else","do","end",
+   "match","with","when","use","import","alias","needs","requires","spawn",
+   "send","loop","protocol","interface","impl","sig","extern","as","doc",
+   "derive","satisfy","for","in","opaque","resource","linear","affine",
+   "invariant","supervise","app","true","false"]
 end
 
 -- Map a (already lower-cased) fence language name to its keyword set.
@@ -238,19 +250,20 @@ end
 -- the *_c booleans pre-decide which comment lead-ins are active for the
 -- language, `blk` enables /* */.  Output is a reversed List(String) of escaped
 -- HTML fragments joined at the end by `highlight`.
-pfn tok_go(cs : List(String), kws : List(String), hash_c : Bool, slash_c : Bool, dash_c : Bool, blk : Bool, out : List(String)) : List(String) do
+pfn tok_go(cs : List(String), kws : List(String), hash_c : Bool, slash_c : Bool, dash_c : Bool, blk : Bool, march : Bool, out : List(String)) : List(String) do
   match cs do
   Nil -> out
   Cons(c, rest) ->
-    -- String literals: " ' `
-    if c == "\"" || c == "'" || c == "`" do
+    -- String literals: " ' `  (March has only "-strings: no char literal,
+    -- and an apostrophe in a comment-free example must not open a string)
+    if c == "\"" || (!march && (c == "'" || c == "`")) do
       let (lit, rest2) = take_string(rest, c, Cons(c, Nil))
-      tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-str", lit), out))
+      tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, march, Cons(span("tok-str", lit), out))
     else
       -- # line comment
       if hash_c && c == "#" do
         let (com, rest2) = take_line(rest, Cons(c, Nil))
-        tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-com", com), out))
+        tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, march, Cons(span("tok-com", com), out))
       else
         -- // line comment  or  /* block comment
         if (slash_c || blk) && c == "/" do
@@ -258,16 +271,16 @@ pfn tok_go(cs : List(String), kws : List(String), hash_c : Bool, slash_c : Bool,
           Cons(n, rest2) ->
             if slash_c && n == "/" do
               let (com, rest3) = take_line(rest2, Cons("/", Cons("/", Nil)))
-              tok_go(rest3, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-com", com), out))
+              tok_go(rest3, kws, hash_c, slash_c, dash_c, blk, march, Cons(span("tok-com", com), out))
             else
               if blk && n == "*" do
                 let (com, rest3) = take_block(rest2, Cons("*", Cons("/", Nil)))
-                tok_go(rest3, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-com", com), out))
+                tok_go(rest3, kws, hash_c, slash_c, dash_c, blk, march, Cons(span("tok-com", com), out))
               else
-                tok_go(rest, kws, hash_c, slash_c, dash_c, blk, Cons(plain(c), out))
+                tok_go(rest, kws, hash_c, slash_c, dash_c, blk, march, Cons(plain(c), out))
               end
             end
-          Nil -> tok_go(rest, kws, hash_c, slash_c, dash_c, blk, Cons(plain(c), out))
+          Nil -> tok_go(rest, kws, hash_c, slash_c, dash_c, blk, march, Cons(plain(c), out))
           end
         else
           -- -- line comment
@@ -276,27 +289,28 @@ pfn tok_go(cs : List(String), kws : List(String), hash_c : Bool, slash_c : Bool,
             Cons(n, rest2) ->
               if n == "-" do
                 let (com, rest3) = take_line(rest2, Cons("-", Cons("-", Nil)))
-                tok_go(rest3, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-com", com), out))
+                tok_go(rest3, kws, hash_c, slash_c, dash_c, blk, march, Cons(span("tok-com", com), out))
               else
-                tok_go(rest, kws, hash_c, slash_c, dash_c, blk, Cons(plain(c), out))
+                tok_go(rest, kws, hash_c, slash_c, dash_c, blk, march, Cons(plain(c), out))
               end
-            Nil -> tok_go(rest, kws, hash_c, slash_c, dash_c, blk, Cons(plain(c), out))
+            Nil -> tok_go(rest, kws, hash_c, slash_c, dash_c, blk, march, Cons(plain(c), out))
             end
           else
             -- numbers
             if is_digit(c) do
               let (num, rest2) = take_number(cs, Nil)
-              tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, Cons(span("tok-num", num), out))
+              tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, march, Cons(span("tok-num", num), out))
             else
               -- identifiers / keywords
               if is_ident_start(c) do
                 let (word, rest2) = take_word(cs, Nil)
                 let frag = if List.member(kws, word) do span("tok-kw", word)
-                  else plain(word) end
-                tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, Cons(frag, out))
+                  else if march && is_upper(word) do span("tok-ty", word)
+                  else plain(word) end end
+                tok_go(rest2, kws, hash_c, slash_c, dash_c, blk, march, Cons(frag, out))
               else
                 -- any other single char: emit escaped, no span
-                tok_go(rest, kws, hash_c, slash_c, dash_c, blk, Cons(plain(c), out))
+                tok_go(rest, kws, hash_c, slash_c, dash_c, blk, march, Cons(plain(c), out))
               end
             end
           end
@@ -327,7 +341,8 @@ fn highlight(lang : String, code : String) : String do
     let slash_c = allows_slash_comment(l)
     let dash_c = allows_dash_comment(l)
     let blk = allows_block_comment(l)
-    let frags = tok_go(string_chars(code), kws, hash_c, slash_c, dash_c, blk, Nil)
+    let march = l == "march"
+    let frags = tok_go(string_chars(code), kws, hash_c, slash_c, dash_c, blk, march, Nil)
     String.join(List.reverse(frags), "")
   end
 end
