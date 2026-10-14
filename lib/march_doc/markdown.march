@@ -499,11 +499,14 @@ pfn collect_fence(lines : List(String), acc : List(String)) : (List(String), Lis
 end
 
 -- Render a fenced code block body to the inner HTML of <pre><code>.
--- With a language we syntax-highlight (tokens escaped + spanned); without one
--- we simply html_escape the verbatim text.  Highlight.highlight guarantees the
--- output is html-escaped, so unescaped source can never reach the page.
+-- Every block is syntax-highlighted (tokens escaped + spanned).  A block with
+-- no language is March: this generator documents March code, and doc
+-- comments write their examples as bare fences or indented blocks.  Tag a
+-- block ```text to opt out of keyword colouring.  Highlight.highlight
+-- guarantees the output is html-escaped, so unescaped source can never reach
+-- the page.
 fn code_body(lang : String, code : String) : String do
-  if String.is_empty(String.trim(lang)) do html_escape(code)
+  if String.is_empty(String.trim(lang)) do Highlight.highlight("march", code)
   else Highlight.highlight(lang, code) end
 end
 
@@ -511,6 +514,41 @@ end
 fn render_fence(lang : String, code_lines : List(String)) : String do
   let code = String.join(code_lines, "\n")
   code_open(lang) ++ code_body(lang, code) ++ "</code></pre>"
+end
+
+-- Leading-space count of a line.
+pfn lead_spaces(line : String, i : Int, n : Int) : Int do
+  if i >= n do n
+  else if String.slice(line, i, 1) == " " do lead_spaces(line, i + 1, n) else i end end
+end
+
+-- Smallest indent over the non-blank lines (-1 when all are blank).
+pfn min_lead(ls : List(String), best : Int) : Int do
+  match ls do
+  Nil -> best
+  Cons(line, rest) ->
+    let n = String.byte_size(line)
+    let w = lead_spaces(line, 0, n)
+    if w >= n do min_lead(rest, best)
+    else if best < 0 || w < best do min_lead(rest, w) else min_lead(rest, best) end end
+  end
+end
+
+pfn drop_lead(ls : List(String), k : Int, acc : List(String)) : List(String) do
+  match ls do
+  Nil -> List.reverse(acc)
+  Cons(line, rest) ->
+    let n = String.byte_size(line)
+    let out = if n <= k do "" else String.slice(line, k, n - k) end
+    drop_lead(rest, k, Cons(out, acc))
+  end
+end
+
+-- Remove the indentation every line of an indented code block shares, so a
+-- block written four (or six) spaces deep renders flush left.
+fn strip_common_indent(ls : List(String)) : List(String) do
+  let k = min_lead(ls, -1)
+  if k <= 0 do ls else drop_lead(ls, k, Nil) end
 end
 
 -- Main markdown-to-HTML loop lifted to a top-level pfn to avoid Perceus RC
@@ -591,7 +629,7 @@ pfn md_go_block(t : String, maybe_stripped : Option(String), buf : List(String),
                   match maybe_stripped do
                   Some(stripped) ->
                     let (code_lines, rest2) = collect_indented(rest, Cons(stripped, Nil))
-                    let code = html_escape(String.join(code_lines, "\n"))
+                    let code = code_body("", String.join(strip_common_indent(code_lines), "\n"))
                     md_go(rest2, Nil, Cons("<pre><code>" ++ code ++ "</code></pre>", out))
                   None ->
                     md_go(rest, Cons(t, buf), out)

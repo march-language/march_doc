@@ -139,16 +139,53 @@ fn extract_single_doc(line) do
   end
 end
 
+-- Smallest leading-whitespace width over the non-blank lines (-1 when every
+-- line is blank).
+pfn min_indent(ls : List(String), best : Int) : Int do
+  match ls do
+  Nil -> best
+  Cons(line, rest) ->
+    let w = indent_width(line)
+    if w >= String.byte_size(line) do min_indent(rest, best)
+    else
+      if best < 0 || w < best do min_indent(rest, w) else min_indent(rest, best) end
+    end
+  end
+end
+
+-- Remove `n` leading bytes of indentation from every line (blank lines become
+-- empty).  Collects into a reversed list; the caller reverses.
+pfn dedent_go(ls : List(String), n : Int, acc : List(String)) : List(String) do
+  match ls do
+  Nil -> acc
+  Cons(line, rest) ->
+    let len = String.byte_size(line)
+    let out = if len <= n do "" else String.slice(line, n, len - n) end
+    dedent_go(rest, n, Cons(out, acc))
+  end
+end
+
+-- Join a doc body's lines with the source indentation removed.  The body of a
+-- `doc """` sits at the declaration's indent (two spaces inside `mod X do`);
+-- without this every paragraph after the first starts indented and the
+-- markdown renderer turns it into a code block.  Relative indentation (the
+-- four-space code examples) survives.
+fn dedent_doc(ls : List(String)) : String do
+  let n = min_indent(ls, -1)
+  let body = if n <= 0 do ls else List.reverse(dedent_go(ls, n, Nil)) end
+  String.trim(String.join(body, "\n"))
+end
+
 -- Collect triple-quoted doc lines until closing """
 fn collect_triple_doc(lines) do
   fn go(ls, acc) do
     match ls do
-    Nil -> (String.trim(String.join(List.reverse(acc), "\n")), Nil)
+    Nil -> (dedent_doc(List.reverse(acc)), Nil)
     Cons(line, rest) ->
       do
         let t = String.trim(line)
         if String.contains(t, "\"\"\"") do
-          (String.trim(String.join(List.reverse(acc), "\n")), rest)
+          (dedent_doc(List.reverse(acc)), rest)
         else
           go(rest, Cons(line, acc))
         end
@@ -305,7 +342,35 @@ end
 -- underflow from the self-capturing recursive closure pattern.
 -- skip = List.length(rest) - List.length(rest2) + 1 replaces the original
 -- List.length(lines) - List.length(rest2) - line_num + 1 to avoid passing `lines`.
-pfn parse_entries_go(include_private : Bool, mod_indent : Int, ls : List(String), pending : Option(String), fns : List(FnEntry), types : List(TypeEntry), ifaces : List(IfaceEntry), line_num : Int) : (List(FnEntry), List(TypeEntry), List(IfaceEntry)) do
+-- The text of a `--` comment line (pre-trimmed): drop the `--` and one space.
+fn comment_text(t : String) : String do
+  if String.byte_size(t) > 2 && String.slice(t, 2, 1) == " " do
+    String.slice(t, 3, String.byte_size(t) - 3)
+  else String.slice(t, 2, String.byte_size(t) - 2) end
+end
+
+-- A section-ruler comment (`-- ---- Accessors ----`, `-- ── Types ──`,
+-- `-- ====`) labels a group of declarations, not the one below it.
+fn is_ruler_comment(text : String) : Bool do
+  String.starts_with(text, "--") || String.starts_with(text, "──") ||
+    String.starts_with(text, "==")
+end
+
+-- Does a trimmed line declare a type or interface?  The language has no `doc`
+-- slot for these (the parser rejects `doc` before a `type`), so the comment
+-- block directly above one is its documentation.
+fn is_type_decl(t : String) : Bool do
+  String.starts_with(t, "type ") || String.starts_with(t, "ptype ") ||
+    String.starts_with(t, "interface ")
+end
+
+-- Inner loop for parse_entries; lifted to top-level pfn to avoid Perceus RC
+-- underflow from the self-capturing recursive closure pattern.
+-- skip = List.length(rest) - List.length(rest2) + 1 replaces the original
+-- List.length(lines) - List.length(rest2) - line_num + 1 to avoid passing `lines`.
+-- `cmt` is the reversed run of `--` comment lines immediately above the
+-- current line (reset by a blank line or any code line).
+pfn parse_entries_go(include_private : Bool, mod_indent : Int, ls : List(String), pending : Option(String), cmt : List(String), fns : List(FnEntry), types : List(TypeEntry), ifaces : List(IfaceEntry), line_num : Int) : (List(FnEntry), List(TypeEntry), List(IfaceEntry)) do
   match ls do
   Nil ->
     (List.reverse(fns), List.reverse(types), List.reverse(ifaces))
@@ -314,18 +379,29 @@ pfn parse_entries_go(include_private : Bool, mod_indent : Int, ls : List(String)
     if String.starts_with(t, "doc \"\"\"") do
       let (doc_text, rest2) = collect_triple_doc(rest)
       let skip = List.length(rest) - List.length(rest2) + 1
-      parse_entries_go(include_private, mod_indent, rest2, Some(doc_text), fns, types, ifaces, line_num + skip)
+      parse_entries_go(include_private, mod_indent, rest2, Some(doc_text), Nil, fns, types, ifaces, line_num + skip)
     else
+      let is_cmt = String.starts_with(t, "--")
+      let cmt2 = if is_cmt do
+          let text = comment_text(t)
+          if is_ruler_comment(text) do Nil else Cons(text, cmt) end
+        else Nil end
+      let pend = match pending do
+        Some(d) -> Some(d)
+        None ->
+          if is_type_decl(t) && !List.is_empty(cmt) do Some(dedent_doc(List.reverse(cmt)))
+          else None end
+        end
       let (pending2, fns2, types2, ifaces2, _) =
-        process_line(line, pending, fns, types, ifaces, include_private, line_num, mod_indent)
-      parse_entries_go(include_private, mod_indent, rest, pending2, fns2, types2, ifaces2, line_num + 1)
+        process_line(line, pend, fns, types, ifaces, include_private, line_num, mod_indent)
+      parse_entries_go(include_private, mod_indent, rest, pending2, cmt2, fns2, types2, ifaces2, line_num + 1)
     end
   end
 end
 
 -- Walk lines extracting doc + fn/type/interface entries.
 fn parse_entries(lines, include_private, mod_indent) do
-  parse_entries_go(include_private, mod_indent, lines, None, Nil, Nil, Nil, 1)
+  parse_entries_go(include_private, mod_indent, lines, None, Nil, Nil, Nil, Nil, 1)
 end
 
 -- Parse a .march file into a ModuleInfo (or None if unparseable).
