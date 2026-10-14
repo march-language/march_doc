@@ -510,6 +510,59 @@ fn code_body(lang : String, code : String) : String do
   else Highlight.highlight(lang, code) end
 end
 
+-- ── "Try it" marking ─────────────────────────────────────────────────────────
+
+-- The n-th space-separated word of a fence info string ("march try" -> "march", "try").
+fn fence_word(info : String, n : Int) : String do
+  match List.nth_opt(List.filter(String.split(String.trim(info), " "), fn w -> !String.is_empty(w)), n) do
+  Some(w) -> w
+  None -> ""
+  end
+end
+
+pfn is_prompt_line(l : String) : Bool do String.starts_with(String.trim(l), "march>") end
+
+-- The expressions of a `march>` transcript, one per line, prompts dropped and
+-- expected outputs skipped.
+pfn transcript_exprs(ls : List(String), acc : List(String)) : List(String) do
+  match ls do
+  Nil -> List.reverse(acc)
+  Cons(l, rest) ->
+    let t = String.trim(l)
+    if String.starts_with(t, "march>") do
+      transcript_exprs(rest, Cons(String.trim(drop_prefix(t, "march>")), acc))
+    else transcript_exprs(rest, acc) end
+  end
+end
+
+-- The data-try attributes for a code block, or "" when it is not runnable.
+-- lang/flag come from the fence info ("" for an indented block).
+fn try_attrs(lang : String, flag : String, code_lines : List(String), mode : Int) : String do
+  let is_march = String.is_empty(lang) || lang == "march"
+  let transcript = List.any(code_lines, is_prompt_line)
+  let marked =
+    if mode == 0 || !is_march || flag == "norun" do false
+    else if flag == "try" do true
+    else mode == 2 && transcript end end
+  if !marked do ""
+  else
+    let payload = if transcript do String.join(transcript_exprs(code_lines, Nil), "\n")
+      else String.join(code_lines, "\n") end
+    let kind = if transcript do "transcript" else "program" end
+    " data-try=\"" ++ html_escape(payload) ++ "\" data-try-kind=\"" ++ kind ++ "\""
+  end
+end
+
+-- A fenced block with "Try it" marking; identical to render_fence when unmarked.
+fn render_fence_try(lang : String, flag : String, code_lines : List(String), mode : Int) : String do
+  let attrs = try_attrs(lang, flag, code_lines, mode)
+  if String.is_empty(attrs) do render_fence(lang, code_lines)
+  else
+    let code = String.join(code_lines, "\n")
+    "<pre" ++ attrs ++ ">" ++ drop_prefix(code_open(lang), "<pre>") ++ code_body(lang, code) ++ "</code></pre>"
+  end
+end
+
 -- Emit a complete fenced code block as one HTML fragment.
 fn render_fence(lang : String, code_lines : List(String)) : String do
   let code = String.join(code_lines, "\n")
@@ -558,7 +611,7 @@ end
 -- Fenced code blocks are collected eagerly (collect_fence) rather than tracked
 -- with a streaming code_mode flag, so the fence language is available when the
 -- block is rendered/highlighted.
-pfn md_go(ls : List(String), buf : List(String), out : List(String)) : String do
+pfn md_go(ls : List(String), buf : List(String), out : List(String), mode : Int) : String do
   match ls do
   Nil ->
     String.join(List.reverse(flush_para(buf, out)), "")
@@ -573,10 +626,10 @@ pfn md_go(ls : List(String), buf : List(String), out : List(String)) : String do
     let has_pipe = String.contains(line, "|")
     let t = String.trim(line)
     if is_fence(t) do
-      let lang = fence_lang(t)
+      let info = fence_lang(t)
       let flushed = flush_para(buf, out)
       let (code_lines, rest2) = collect_fence(rest, Nil)
-      md_go(rest2, Nil, Cons(render_fence(lang, code_lines), flushed))
+      md_go(rest2, Nil, Cons(render_fence_try(fence_word(info, 0), fence_word(info, 1), code_lines, mode), flushed), mode)
     else
       -- Table detection consumes `rest` exactly once via this match: a table
       -- start is `has_pipe` AND the next line (rest's head) is a separator.
@@ -588,12 +641,12 @@ pfn md_go(ls : List(String), buf : List(String), out : List(String)) : String do
         if has_pipe && is_table_separator(String.trim(next)) do
           let flushed = flush_para(buf, out)
           let (table_html, rest2) = build_table(t, next, more)
-          md_go(rest2, Nil, Cons(table_html, flushed))
+          md_go(rest2, Nil, Cons(table_html, flushed), mode)
         else
-          md_go_block(t, maybe_stripped, buf, out, Cons(next, more))
+          md_go_block(t, maybe_stripped, buf, out, Cons(next, more), mode)
         end
       Nil ->
-        md_go_block(t, maybe_stripped, buf, out, Nil)
+        md_go_block(t, maybe_stripped, buf, out, Nil, mode)
       end
     end
   end
@@ -602,40 +655,42 @@ end
 -- Block-level dispatch for a single non-fence, non-table line.  Split out of
 -- md_go so the table `match rest` above stays a single, self-contained consume
 -- of `rest`.  `t` is the trimmed line; `rest` is the remaining document.
-pfn md_go_block(t : String, maybe_stripped : Option(String), buf : List(String), out : List(String), rest : List(String)) : String do
-      if String.is_empty(t) do md_go(rest, Nil, flush_para(buf, out))
+pfn md_go_block(t : String, maybe_stripped : Option(String), buf : List(String), out : List(String), rest : List(String), mode : Int) : String do
+      if String.is_empty(t) do md_go(rest, Nil, flush_para(buf, out), mode)
       else
         if is_ul_item(t) do
           let flushed = flush_para(buf, out)
           let (items, rest2) = collect_ul(rest, Cons(list_item_text(t), Nil))
-          md_go(rest2, Nil, Cons("<ul>" ++ render_list_items(items) ++ "</ul>", flushed))
+          md_go(rest2, Nil, Cons("<ul>" ++ render_list_items(items) ++ "</ul>", flushed), mode)
         else
           if is_ol_item(t) do
             let flushed = flush_para(buf, out)
             let (items, rest2) = collect_ol(rest, Cons(list_item_text(t), Nil))
-            md_go(rest2, Nil, Cons("<ol>" ++ render_list_items(items) ++ "</ol>", flushed))
+            md_go(rest2, Nil, Cons("<ol>" ++ render_list_items(items) ++ "</ol>", flushed), mode)
           else
             if is_admonition(t) do
               let flushed = flush_para(buf, out)
               let (items, rest2) = collect_blockquote(rest, Cons(drop_prefix(t, "> "), Nil))
-              md_go(rest2, Nil, Cons(render_admonition(items), flushed))
+              md_go(rest2, Nil, Cons(render_admonition(items), flushed), mode)
             else
               match md_heading(t) do
               Some(heading_html) ->
                 let flushed = flush_para(buf, out)
-                md_go(rest, Nil, Cons(heading_html, flushed))
+                md_go(rest, Nil, Cons(heading_html, flushed), mode)
               None ->
                 if List.is_empty(buf) do
                   match maybe_stripped do
                   Some(stripped) ->
                     let (code_lines, rest2) = collect_indented(rest, Cons(stripped, Nil))
-                    let code = code_body("", String.join(strip_common_indent(code_lines), "\n"))
-                    md_go(rest2, Nil, Cons("<pre><code>" ++ code ++ "</code></pre>", out))
+                    let lines = strip_common_indent(code_lines)
+                    let attrs = try_attrs("", "", lines, mode)
+                    let code = code_body("", String.join(lines, "\n"))
+                    md_go(rest2, Nil, Cons("<pre" ++ attrs ++ "><code>" ++ code ++ "</code></pre>", out), mode)
                   None ->
-                    md_go(rest, Cons(t, buf), out)
+                    md_go(rest, Cons(t, buf), out, mode)
                   end
                 else
-                  md_go(rest, Cons(t, buf), out)
+                  md_go(rest, Cons(t, buf), out, mode)
                 end
               end
             end
@@ -645,7 +700,16 @@ pfn md_go_block(t : String, maybe_stripped : Option(String), buf : List(String),
 end
 
 fn md_to_html(md : String) : String do
-  md_go(String.split(md, "\n"), Nil, Nil)
+  md_go(String.split(md, "\n"), Nil, Nil, 0)
+end
+
+-- md_to_html with "Try it" marking. mode: 0 off (identical to md_to_html),
+-- 1 only blocks fenced ```march try, 2 also every `march>` transcript (the
+-- module opted in with `doc: try`). A ```march norun fence is never marked.
+-- Marked blocks carry data-try (the code to run) and data-try-kind
+-- (transcript | program); the page's TryIt script adds the button.
+fn md_to_html_mode(md : String, mode : Int) : String do
+  md_go(String.split(md, "\n"), Nil, Nil, mode)
 end
 
 end

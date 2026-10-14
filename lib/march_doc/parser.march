@@ -55,6 +55,41 @@ fn iface_line(e : IfaceEntry) : Int do
   end
 end
 
+-- ── "Try it" module marker ──────────────────────────────────────────────────
+-- A line `doc: try` in a module's header comment turns on "Try it" buttons for
+-- the module's `march>` examples (when the docs are generated with --try-it).
+-- The marker stays in the parsed comment; module_comment strips it for display.
+
+pfn is_try_marker(line : String) : Bool do String.trim(line) == "doc: try" end
+
+pfn drop_try_markers(ls : List(String), acc : List(String)) : List(String) do
+  match ls do
+  Nil -> List.reverse(acc)
+  Cons(l, rest) ->
+    if is_try_marker(l) do drop_try_markers(rest, acc)
+    else drop_try_markers(rest, Cons(l, acc)) end
+  end
+end
+
+-- The module's header comment as it should be displayed: without the
+-- `doc: try` marker, and None if nothing else is left.
+fn module_comment(m : ModuleInfo) : Option(String) do
+  match m do
+  ModuleInfo(_, None, _, _, _, _) -> None
+  ModuleInfo(_, Some(c), _, _, _, _) ->
+    let text = String.trim(String.join(drop_try_markers(String.split(c, "\n"), Nil), "\n"))
+    if String.is_empty(text) do None else Some(text) end
+  end
+end
+
+-- Does the module opt its `march>` examples into "Try it" by default?
+fn try_default(m : ModuleInfo) : Bool do
+  match m do
+  ModuleInfo(_, None, _, _, _, _) -> false
+  ModuleInfo(_, Some(c), _, _, _, _) -> List.any(String.split(c, "\n"), is_try_marker)
+  end
+end
+
 fn is_pub(e : FnEntry) : Bool do !entry_priv(e) end
 fn is_prv(e : FnEntry) : Bool do entry_priv(e) end
 
@@ -296,7 +331,9 @@ fn process_line(line, pending, fns, types, ifaces, include_private, line_num, mo
   let t = String.trim(line)
   if String.is_empty(t) do (pending, fns, types, ifaces, Nil)
   else
-    if String.starts_with(t, "--") do (pending, fns, types, ifaces, Nil)
+    -- A comment or a declaration attribute (`@[assume]`, `@[trusted_linear(v)]`)
+    -- between a `doc` and its declaration keeps the doc pending.
+    if String.starts_with(t, "--") || String.starts_with(t, "@[") do (pending, fns, types, ifaces, Nil)
     else
       if String.starts_with(t, "doc \"") do
         let doc_text = extract_single_doc(t)

@@ -14,17 +14,17 @@ mod MarchDoc do
 -- Explicit pfn loop to avoid FBIP closure-capture RC bug in List.each.
 -- List.each with a capturing lambda frees the closure (and captured registry/sidebar)
 -- via FBIP after the first iteration, corrupting subsequent iterations.
-pfn gen_module_pages(modules, output_dir, sidebar, registry, source_url) do
+pfn gen_module_pages(modules, output_dir, sidebar, registry, source_url, site_base) do
   match modules do
   Nil -> ()
   Cons(info, rest) ->
     let name = Parser.info_name(info)
-    let html = DocHtml.render_module(info, sidebar, registry, source_url)
+    let html = DocHtml.render_module_try(info, sidebar, registry, source_url, site_base)
     match File.write(output_dir ++ "/" ++ name ++ ".html", html) do
       Err(_) -> IO.warn("march_doc: failed to write " ++ name ++ ".html")
       Ok(_) -> ()
     end
-    gen_module_pages(rest, output_dir, sidebar, registry, source_url)
+    gen_module_pages(rest, output_dir, sidebar, registry, source_url, site_base)
   end
 end
 
@@ -61,6 +61,13 @@ end
 -- Generate HTML documentation for all .march files in the given directories.
 -- source_url is an optional URL pattern with {path} and {line} placeholders for source links.
 fn generate(src_dirs : List(String), output_dir : String, include_private : Bool, source_url : Option(String)) : () do
+  generate_try(src_dirs, output_dir, include_private, source_url, None)
+end
+
+-- generate with "Try it" buttons: site_base is the site root the in-browser REPL
+-- assets are served under (Some("") for march-lang.org); None generates exactly
+-- what generate always has. See TryIt.
+fn generate_try(src_dirs : List(String), output_dir : String, include_private : Bool, source_url : Option(String), site_base : Option(String)) : () do
   let all_files = List.sort_by(
     List.flat_map(src_dirs, Discovery.walk_march_files),
     fn (a, b) -> a < b
@@ -92,7 +99,7 @@ fn generate(src_dirs : List(String), output_dir : String, include_private : Bool
   let registry = TypeRegistry.build_registry(modules)
 
   -- Generate module pages
-  gen_module_pages(modules, output_dir, sidebar, registry, source_url)
+  gen_module_pages(modules, output_dir, sidebar, registry, source_url, site_base)
 
   -- Generate guide pages
   if !List.is_empty(guide_files) do

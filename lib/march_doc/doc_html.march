@@ -409,10 +409,10 @@ end
 
 -- ── Item renderers ───────────────────────────────────────────────────────────
 
-fn render_comment_html(comment_opt) do
+fn render_comment_html(comment_opt, mode) do
   match comment_opt do
   None -> ""
-  Some(c) -> "<div class=\"mdoc\">" ++ Markdown.md_to_html(c) ++ "</div>"
+  Some(c) -> "<div class=\"mdoc\">" ++ Markdown.md_to_html_mode(c, mode) ++ "</div>"
   end
 end
 
@@ -430,7 +430,7 @@ fn make_src_link(src_pattern, file_path, line_num) do
   end
 end
 
-fn render_fn(entry, registry, mod_name, src_pattern, file_path) do
+fn render_fn(entry, registry, mod_name, src_pattern, file_path, mode) do
   match entry do
   FnEntry(name, dsig, doc_opt, is_private, line_num) ->
     let badge_cls = if is_private do "bpfn" else "bfn" end
@@ -445,14 +445,14 @@ fn render_fn(entry, registry, mod_name, src_pattern, file_path) do
       "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ src ++ anchor ++ "</div>"
     let doc_html = match doc_opt do
       None -> ""
-      Some(d) -> Markdown.md_to_html(d)
+      Some(d) -> Markdown.md_to_html_mode(d, mode)
     end
     let body = "<div class=\"ib\">" ++ doc_html ++ "</div>"
     "<div class=\"item\" id=\"" ++ anchor_id ++ "\">" ++ hdr ++ body ++ "</div>"
   end
 end
 
-fn render_type(entry, registry, mod_name, src_pattern, file_path) do
+fn render_type(entry, registry, mod_name, src_pattern, file_path, mode) do
   match entry do
   TypeEntry(name, dsig, doc_opt, line_num) ->
     let is_prv = String.starts_with(dsig, "ptype ")
@@ -469,14 +469,14 @@ fn render_type(entry, registry, mod_name, src_pattern, file_path) do
       "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ src ++ anchor ++ "</div>"
     let doc_html = match doc_opt do
       None -> ""
-      Some(d) -> Markdown.md_to_html(d)
+      Some(d) -> Markdown.md_to_html_mode(d, mode)
     end
     let body = "<div class=\"ib\">" ++ doc_html ++ "</div>"
     "<div class=\"item\" id=\"" ++ anchor_id ++ "\">" ++ hdr ++ body ++ "</div>"
   end
 end
 
-fn render_iface(entry, registry, mod_name, src_pattern, file_path) do
+fn render_iface(entry, registry, mod_name, src_pattern, file_path, mode) do
   match entry do
   IfaceEntry(name, dsig, doc_opt, _methods, line_num) ->
     let anchor_id = "iface-" ++ Markdown.html_escape(name)
@@ -489,7 +489,7 @@ fn render_iface(entry, registry, mod_name, src_pattern, file_path) do
       "<span class=\"sig\">" ++ sig_html ++ "</span>" ++ src ++ anchor ++ "</div>"
     let doc_html = match doc_opt do
       None -> ""
-      Some(d) -> Markdown.md_to_html(d)
+      Some(d) -> Markdown.md_to_html_mode(d, mode)
     end
     let body = "<div class=\"ib\">" ++ doc_html ++ "</div>"
     "<div class=\"item\" id=\"" ++ anchor_id ++ "\">" ++ hdr ++ body ++ "</div>"
@@ -510,48 +510,60 @@ end
 -- Explicit loops to render entry lists without capturing registry in a closure.
 -- List.map with a capturing lambda causes FBIP to free registry after the first
 -- iteration; passing registry as an explicit pfn parameter avoids this.
-pfn render_type_entries_go(entries, registry, mod_name, src_pattern, file_path, acc) do
+pfn render_type_entries_go(entries, registry, mod_name, src_pattern, file_path, mode, acc) do
   match entries do
   Nil -> List.reverse(acc)
   Cons(e, rest) ->
-    let s = render_type(e, registry, mod_name, src_pattern, file_path)
-    render_type_entries_go(rest, registry, mod_name, src_pattern, file_path, Cons(s, acc))
+    let s = render_type(e, registry, mod_name, src_pattern, file_path, mode)
+    render_type_entries_go(rest, registry, mod_name, src_pattern, file_path, mode, Cons(s, acc))
   end
 end
 
-pfn render_iface_entries_go(entries, registry, mod_name, src_pattern, file_path, acc) do
+pfn render_iface_entries_go(entries, registry, mod_name, src_pattern, file_path, mode, acc) do
   match entries do
   Nil -> List.reverse(acc)
   Cons(e, rest) ->
-    let s = render_iface(e, registry, mod_name, src_pattern, file_path)
-    render_iface_entries_go(rest, registry, mod_name, src_pattern, file_path, Cons(s, acc))
+    let s = render_iface(e, registry, mod_name, src_pattern, file_path, mode)
+    render_iface_entries_go(rest, registry, mod_name, src_pattern, file_path, mode, Cons(s, acc))
   end
 end
 
-pfn render_fn_entries_go(entries, registry, mod_name, src_pattern, file_path, acc) do
+pfn render_fn_entries_go(entries, registry, mod_name, src_pattern, file_path, mode, acc) do
   match entries do
   Nil -> List.reverse(acc)
   Cons(e, rest) ->
-    let s = render_fn(e, registry, mod_name, src_pattern, file_path)
-    render_fn_entries_go(rest, registry, mod_name, src_pattern, file_path, Cons(s, acc))
+    let s = render_fn(e, registry, mod_name, src_pattern, file_path, mode)
+    render_fn_entries_go(rest, registry, mod_name, src_pattern, file_path, mode, Cons(s, acc))
   end
 end
 
 fn render_module(info : ModuleInfo, sidebar : String, registry : List(TypeRef), src_pattern : Option(String)) : String do
+  render_module_try(info, sidebar, registry, src_pattern, None)
+end
+
+-- render_module with "Try it": site_base is the site root the REPL assets are
+-- served under (Some("") for march-lang.org's /assets/...); None renders the page
+-- exactly as render_module always has. See TryIt.
+fn render_module_try(info : ModuleInfo, sidebar : String, registry : List(TypeRef), src_pattern : Option(String), site_base : Option(String)) : String do
+  let display_comment = Parser.module_comment(info)
+  let mode = match site_base do
+    None -> 0
+    Some(_) -> if Parser.try_default(info) do 2 else 1 end
+  end
   match info do
-  ModuleInfo(mod_name, comment_opt, fns, types, ifaces, file_path) ->
+  ModuleInfo(mod_name, _, fns, types, ifaces, file_path) ->
     let breadcrumb = "<nav class=\"breadcrumb\"><a href=\"index.html\">March Docs</a><span class=\"sep\">&rsaquo;</span><span>" ++ Markdown.html_escape(mod_name) ++ "</span></nav>"
     let title_html = breadcrumb ++ "<h1>" ++ Markdown.html_escape(mod_name) ++ "</h1>"
-    let comment_html = render_comment_html(comment_opt)
+    let comment_html = render_comment_html(display_comment, mode)
     -- Unconditional pfn calls so Perceus sees a linear sequence of consuming
     -- uses of `registry` and inserts the correct inc_rcs between them.
     -- (Conditional uses inside if-else branches confuse Perceus RC equalization.)
-    let type_items = render_type_entries_go(types, registry, mod_name, src_pattern, file_path, Nil)
-    let iface_items = render_iface_entries_go(ifaces, registry, mod_name, src_pattern, file_path, Nil)
+    let type_items = render_type_entries_go(types, registry, mod_name, src_pattern, file_path, mode, Nil)
+    let iface_items = render_iface_entries_go(ifaces, registry, mod_name, src_pattern, file_path, mode, Nil)
     let pub_fns = sort_fns(List.filter(fns, Parser.is_pub))
     let prv_fns = sort_fns(List.filter(fns, Parser.is_prv))
-    let fn_items = render_fn_entries_go(pub_fns, registry, mod_name, src_pattern, file_path, Nil)
-    let prv_items = render_fn_entries_go(prv_fns, registry, mod_name, src_pattern, file_path, Nil)
+    let fn_items = render_fn_entries_go(pub_fns, registry, mod_name, src_pattern, file_path, mode, Nil)
+    let prv_items = render_fn_entries_go(prv_fns, registry, mod_name, src_pattern, file_path, mode, Nil)
     let types_html = if List.is_empty(type_items) do ""
       else "<h2>Types</h2>" ++ String.join(type_items, "\n") end
     let ifaces_html = if List.is_empty(iface_items) do ""
@@ -560,8 +572,13 @@ fn render_module(info : ModuleInfo, sidebar : String, registry : List(TypeRef), 
       else "<h2>Functions</h2>" ++ String.join(fn_items, "\n") end
     let prv_html = if List.is_empty(prv_items) do ""
       else "<h2>Private</h2>" ++ String.join(prv_items, "\n") end
-    let content = title_html ++ comment_html ++ types_html ++ ifaces_html ++ pub_html ++ prv_html
-    page(mod_name, sidebar, false, content)
+    let body = title_html ++ comment_html ++ types_html ++ ifaces_html ++ pub_html ++ prv_html
+    -- The sidebar only on pages with something to run.
+    let panel = match site_base do
+      None -> ""
+      Some(base) -> if String.contains(body, "<pre data-try=") do TryIt.panel(base) else "" end
+    end
+    page(mod_name, sidebar, false, body ++ panel)
   end
 end
 
@@ -569,8 +586,8 @@ end
 
 fn index_card(info) do
   match info do
-  ModuleInfo(name, comment_opt, fns, types, _, _) ->
-    let blurb = match comment_opt do
+  ModuleInfo(name, _, fns, types, _, _) ->
+    let blurb = match Parser.module_comment(info) do
       None -> ""
       Some(c) ->
         let first = match List.head_opt(String.split(c, "\n")) do

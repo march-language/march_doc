@@ -88,8 +88,9 @@ end
 
 -- Generate a .scroll.md file for a module.
 fn render_module(info : ModuleInfo) : Option((String, String)) do
+  let comment_opt = Parser.module_comment(info)
   match info do
-  ModuleInfo(mod_name, comment_opt, fns, types, _, _) ->
+  ModuleInfo(mod_name, _, fns, types, _, _) ->
     -- Collect type sections (with examples) first, then fn sections
     let type_sections = List.filter(
       List.map(types, render_type_section),
