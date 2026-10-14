@@ -68,8 +68,9 @@ pfn iface_entries_go(ifaces : List(IfaceEntry), mod_name : String, acc) do
 end
 
 fn module_entries(info) do
+  let comment_opt = Parser.module_comment(info)
   match info do
-    ModuleInfo(mod_name, comment_opt, fns, types, ifaces, _) ->
+    ModuleInfo(mod_name, _, fns, types, ifaces, _) ->
       let mod_entry = entry(mod_name, "module", mod_name, "", comment_opt)
       let fn_entries = fn_entries_go(fns, mod_name, Nil)
       let type_entries = type_entries_go(types, mod_name, Nil)

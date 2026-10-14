@@ -768,6 +768,51 @@ describe "Parser" do
       end
     end
 
+    test "doc: try marker sets the module default and is hidden from the comment" do
+      match parse_src("trymark", "-- Thing module.\n--\n-- doc: try\n\nmod TM do\n  fn f() do 1 end\nend", false) do
+        None -> assert false
+        Some(info) ->
+          assert (Parser.try_default(info))
+          match Parser.module_comment(info) do
+            None -> assert false
+            Some(c) ->
+              assert (String.contains(c, "Thing module."))
+              assert (String.contains(c, "doc: try") == false)
+          end
+      end
+    end
+
+    test "a comment holding only the marker displays as no comment" do
+      match parse_src("tryonly", "-- doc: try\n\nmod TO do\n  fn f() do 1 end\nend", false) do
+        None -> assert false
+        Some(info) ->
+          assert (Parser.try_default(info))
+          assert (Option.is_none(Parser.module_comment(info)))
+      end
+    end
+
+    test "no marker, no default" do
+      match parse_src("trynone", "-- Plain module.\n\nmod TN do\n  fn f() do 1 end\nend", false) do
+        None -> assert false
+        Some(info) -> assert (Parser.try_default(info) == false)
+      end
+    end
+
+    test "an attribute between doc and fn keeps the doc" do
+      match parse_src("attr", "mod TA do\n  doc \"Sorted.\"\n  -- note\n  @[assume]\n  fn sort(v) do v end\nend", false) do
+        None -> assert false
+        Some(info) -> match info do ModuleInfo(_, _, fns, _, _, _) ->
+          match List.head_opt(fns) do
+            None -> assert false
+            Some(e) -> match e do FnEntry(name, _, d, _, _) ->
+              assert (name == "sort")
+              assert (d == Some("Sorted."))
+            end
+          end
+        end
+      end
+    end
+
     test "interface declaration" do
       match parse_src("iface", "mod IT do\ninterface Printable do\n  fn to_string(self) : String\nend\nend", false) do
         None -> assert false

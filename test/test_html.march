@@ -442,6 +442,41 @@ describe "Html" do
 
   end
 
+
+  describe "try it" do
+
+    test "render_module without a site base has no panel or buttons" do
+      let info = ModuleInfo("TM", Some("Thing.\n\ndoc: try\n\n    march> 1 + 1\n    2"), Nil, Nil, Nil, "tm.march")
+      let html = DocHtml.render_module(info, "", Nil, None)
+      assert (String.contains(html, "try-panel") == false)
+      assert (String.contains(html, "data-try") == false)
+      assert (String.contains(html, "doc: try") == false)
+    end
+
+    test "render_module_try adds the panel and marks the module's transcripts" do
+      let info = ModuleInfo("TM", Some("Thing.\n\ndoc: try\n\n    march> 1 + 1\n    2"), Nil, Nil, Nil, "tm.march")
+      let html = DocHtml.render_module_try(info, "", Nil, None, Some(""))
+      assert (String.contains(html, "id=\"try-panel\" data-base=\"\""))
+      assert (String.contains(html, "data-try=\"1 + 1\""))
+      assert (String.contains(html, "/assets/march-repl.js"))
+      assert (String.contains(html, "doc: try") == false)
+    end
+
+    test "without the module marker only tagged fences are marked" do
+      let info = ModuleInfo("TM", Some("Thing.\n\n    march> 1 + 1\n\n```march try\nlet x = 1\n```"), Nil, Nil, Nil, "tm.march")
+      let html = DocHtml.render_module_try(info, "", Nil, None, Some("/base"))
+      assert (String.contains(html, "data-try=\"1 + 1\"") == false)
+      assert (String.contains(html, "data-try=\"let x = 1\""))
+      assert (String.contains(html, "data-base=\"/base\""))
+    end
+
+    test "a page with nothing to run gets no panel" do
+      let info = ModuleInfo("TM", Some("Thing.\n\n    march> 1 + 1\n    2"), Nil, Nil, Nil, "tm.march")
+      let html = DocHtml.render_module_try(info, "", Nil, None, Some(""))
+      assert (String.contains(html, "try-panel") == false)
+    end
+
+  end
 end
 
 end

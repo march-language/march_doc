@@ -6,6 +6,8 @@
 -- Usage:
 --   forge march_doc.doc              generate docs to docs/{package_name}/
 --   forge doc --stdlib -o docs/stdlib   generate stdlib docs only
+--   forge doc --try-it [--site-base P]  add "Try it" buttons (see TryIt): opted-in
+--                                       examples run in the REPL at P/assets/
 
 mod MarchDocTask do
 
@@ -96,6 +98,14 @@ fn main(_cap_console : Cap(IO.Console), _cap_fileread : Cap(IO.FileRead),
         _cap_filewrite : Cap(IO.FileWrite), _cap_process : Cap(IO.Process)) do
   let args = parse_task_args()
   let stdlib_only = has_flag(args, "--stdlib")
+  -- --try-it turns on "Try it" buttons; the REPL assets are served under the
+  -- site root given by --site-base (default: the root itself).
+  let site_base = if has_flag(args, "--try-it") do
+      match flag_value(args, "--site-base") do
+        Some(b) -> Some(b)
+        None -> Some("")
+      end
+    else None end
   if stdlib_only do
     let output_dir = match flag_value(args, "-o") do
       Some(d) -> d
@@ -106,7 +116,7 @@ fn main(_cap_console : Cap(IO.Console), _cap_fileread : Cap(IO.FileRead),
       IO.warn("march_doc: MARCH_STDLIB not set; cannot generate stdlib docs")
       System.exit(1)
     else
-      MarchDoc.generate([stdlib_dir], output_dir, false, None)
+      MarchDoc.generate_try([stdlib_dir], output_dir, false, None, site_base)
     end
   else
     match find_project_root() do
@@ -121,7 +131,7 @@ fn main(_cap_console : Cap(IO.Console), _cap_fileread : Cap(IO.FileRead),
         end
         let lib = root ++ "/lib"
         if Dir.exists(lib) do
-          MarchDoc.generate([lib], output_dir, false, None)
+          MarchDoc.generate_try([lib], output_dir, false, None, site_base)
         else
           IO.warn("march_doc: no lib/ directory found")
           System.exit(1)
