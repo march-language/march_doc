@@ -477,6 +477,33 @@ describe "Html" do
     end
 
   end
+
+  describe "page weight" do
+
+    test "sidebar_nav_for expands only the current module" do
+      let a = ModuleInfo("Alpha", None, Cons(FnEntry("one", "one()", None, false, 1), Nil), Nil, Nil, "a.march")
+      let b = ModuleInfo("Beta", None, Cons(FnEntry("two", "two()", None, false, 1), Nil), Nil, Nil, "b.march")
+      let nav = DocHtml.sidebar_nav_for(Cons(a, Cons(b, Nil)), "Alpha")
+      assert (String.contains(nav, "Alpha.html#fn-one"))
+      assert (String.contains(nav, "Beta.html#fn-two") == false)
+      assert (String.contains(nav, "href=\"Beta.html\""))
+    end
+
+    test "sidebar_nav lists modules without entries" do
+      let a = ModuleInfo("Alpha", None, Cons(FnEntry("one", "one()", None, false, 1), Nil), Nil, Nil, "a.march")
+      let nav = DocHtml.sidebar_nav(Cons(a, Nil))
+      assert (String.contains(nav, "href=\"Alpha.html\""))
+      assert (String.contains(nav, "#fn-one") == false)
+    end
+
+    test "the search index is fetched on first use, not at page load" do
+      let js = DocHtml.search_js()
+      assert (String.contains(js, "function loadSI()"))
+      assert (String.contains(js, "var SI=null;\nfetch(") == false)
+      assert (String.contains(DocHtml.page_js(), "function openSearch(){loadSI();"))
+    end
+
+  end
 end
 
 end
