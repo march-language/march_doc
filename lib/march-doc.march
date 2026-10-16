@@ -14,17 +14,21 @@ mod MarchDoc do
 -- Explicit pfn loop to avoid FBIP closure-capture RC bug in List.each.
 -- List.each with a capturing lambda frees the closure (and captured registry/sidebar)
 -- via FBIP after the first iteration, corrupting subsequent iterations.
-pfn gen_module_pages(modules, output_dir, sidebar, registry, source_url, site_base) do
+-- `sidebar_head` is the part of the sidebar shared by every page (guides and
+-- the Modules heading); each page then lists the modules with only its own
+-- expanded (DocHtml.sidebar_nav_for).
+pfn gen_module_pages(modules, all_modules, output_dir, sidebar_head, registry, source_url, site_base) do
   match modules do
   Nil -> ()
   Cons(info, rest) ->
     let name = Parser.info_name(info)
+    let sidebar = sidebar_head ++ DocHtml.sidebar_nav_for(all_modules, name)
     let html = DocHtml.render_module_try(info, sidebar, registry, source_url, site_base)
     match File.write(output_dir ++ "/" ++ name ++ ".html", html) do
       Err(_) -> IO.warn("march_doc: failed to write " ++ name ++ ".html")
       Ok(_) -> ()
     end
-    gen_module_pages(rest, output_dir, sidebar, registry, source_url, site_base)
+    gen_module_pages(rest, all_modules, output_dir, sidebar_head, registry, source_url, site_base)
   end
 end
 
@@ -93,13 +97,13 @@ fn generate_try(src_dirs : List(String), output_dir : String, include_private : 
   -- Build combined sidebar: guides (if any) + hierarchical modules
   let guide_sidebar = if List.is_empty(guide_files) do ""
     else "<div class=\"sb-heading\">Guides</div>" ++ Guides.sidebar_links(guide_files) end
-  let module_sidebar = DocHtml.sidebar_nav(modules)
-  let sidebar = guide_sidebar ++ "<div class=\"sb-heading\">Modules</div>" ++ module_sidebar
+  let sidebar_head = guide_sidebar ++ "<div class=\"sb-heading\">Modules</div>"
+  let sidebar = sidebar_head ++ DocHtml.sidebar_nav(modules)
 
   let registry = TypeRegistry.build_registry(modules)
 
   -- Generate module pages
-  gen_module_pages(modules, output_dir, sidebar, registry, source_url, site_base)
+  gen_module_pages(modules, modules, output_dir, sidebar_head, registry, source_url, site_base)
 
   -- Generate guide pages
   if !List.is_empty(guide_files) do

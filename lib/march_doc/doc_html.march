@@ -185,7 +185,7 @@ function toggleTheme(){var t=getTheme()==='dark'?'light':'dark';lsSet('march-doc
 applyTheme(getTheme());
 
 /* Search overlay */
-function openSearch(){document.getElementById('search-overlay').classList.add('open');
+function openSearch(){loadSI();document.getElementById('search-overlay').classList.add('open');
 var inp=document.getElementById('search-input');if(inp){inp.value='';inp.focus();}}
 function closeSearch(){document.getElementById('search-overlay').classList.remove('open');
 var sr=document.getElementById('sr');if(sr)sr.innerHTML='';}
@@ -234,8 +234,15 @@ end
 fn search_js() : String do
   IOList.to_string(~H"""
 /* Cross-module search: loads search-index.json, fuzzy matches, renders results */
-var SI=null;
-fetch('search-index.json').then(function(r){return r.json();}).then(function(d){SI=d;}).catch(function(){});
+/* The index covers every module (~400 KB for the stdlib), so it is fetched the
+   first time search is opened (or the search button is hovered), not with every
+   page. A query typed before it arrives is re-run when it lands. */
+var SI=null,SIloading=false;
+function loadSI(){if(SI||SIloading)return;SIloading=true;
+fetch('search-index.json').then(function(r){return r.json();}).then(function(d){SI=d;
+var q=document.getElementById('search-input');if(q&&q.value.trim())q.dispatchEvent(new Event('input'));})
+.catch(function(){SIloading=false;});}
+var STR=document.getElementById('search-trigger');if(STR)STR.addEventListener('mouseenter',loadSI);
 
 /* Levenshtein distance */
 function ld(a,b){
@@ -365,8 +372,7 @@ fn sidebar_links(module_names : List(String)) : String do
 end
 
 -- Hierarchical sidebar: each module is an expandable group with sub-items.
-fn sidebar_nav(modules : List(ModuleInfo)) : String do
-  let groups = List.map(modules, fn info ->
+fn sidebar_group_full(info : ModuleInfo) : String do
     match info do
     ModuleInfo(mod_name, _, fns, types, ifaces, _) ->
       let esc_name = Markdown.html_escape(mod_name)
@@ -403,8 +409,42 @@ fn sidebar_nav(modules : List(ModuleInfo)) : String do
       "<a class=\"sl\" href=\"" ++ href ++ "\">" ++ esc_name ++ "</a>" ++
       "</div>" ++ sub_html ++ "</div>"
     end
-  )
-  String.join(groups, "\n")
+end
+
+-- A module's sidebar line without its entries (every module but the page's own).
+fn sidebar_group_slim(info : ModuleInfo) : String do
+  match info do
+  ModuleInfo(mod_name, _, _, _, _, _) ->
+    let esc_name = Markdown.html_escape(mod_name)
+    let href = esc_name ++ ".html"
+    "<div class=\"sb-group\"><div class=\"sb-group-hdr\" data-href=\"" ++ href ++ "\">" ++
+    "<span class=\"sb-chevron\" style=\"visibility:hidden\">&#9656;</span>" ++
+    "<a class=\"sl\" href=\"" ++ href ++ "\">" ++ esc_name ++ "</a></div></div>"
+  end
+end
+
+pfn sidebar_go(mods : List(ModuleInfo), current : String, acc : List(String)) : List(String) do
+  match mods do
+  Nil -> List.reverse(acc)
+  Cons(info, rest) ->
+    let line = if Parser.info_name(info) == current do sidebar_group_full(info)
+      else sidebar_group_slim(info) end
+    sidebar_go(rest, current, Cons(line, acc))
+  end
+end
+
+-- The module list for a page's sidebar: every module as one link, and only
+-- `current` (the page's own module, "" for none) expanded to its types,
+-- interfaces and functions. Inlining every module's entries on every page made
+-- each stdlib page ~400 KB and ~7,300 DOM nodes, ~85% of it sidebar; other
+-- modules' entries are reachable through search.
+fn sidebar_nav_for(modules : List(ModuleInfo), current : String) : String do
+  String.join(sidebar_go(modules, current, Nil), "\n")
+end
+
+-- The module list with no module expanded (index and guide pages).
+fn sidebar_nav(modules : List(ModuleInfo)) : String do
+  sidebar_nav_for(modules, "")
 end
 
 -- ── Item renderers ───────────────────────────────────────────────────────────
