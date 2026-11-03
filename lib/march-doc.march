@@ -23,13 +23,29 @@ pfn gen_module_pages(modules, all_modules, output_dir, sidebar_head, registry, s
   Cons(info, rest) ->
     let name = Parser.info_name(info)
     let sidebar = sidebar_head ++ DocHtml.sidebar_nav_for(all_modules, name)
-    let laws = Parser.file_laws(Parser.info_path(info))
+    let laws = law_statuses(Parser.file_laws(Parser.info_path(info)), Parser.info_path(info))
     let html = DocHtml.render_module_laws(info, sidebar, registry, source_url, site_base, laws)
     match File.write(output_dir ++ "/" ++ name ++ ".html", html) do
       Err(_) -> IO.warn("march_doc: failed to write " ++ name ++ ".html")
       Ok(_) -> ()
     end
     gen_module_pages(rest, all_modules, output_dir, sidebar_head, registry, source_url, site_base)
+  end
+end
+
+-- Each law's status, from `march --check --reflect-deps` on its file (a z3
+-- check, so only files that have a lemma pay for it).  An unrunnable
+-- `march` leaves the statuses unknown.
+pfn law_statuses(laws : List(Law), path : String) : List(Law) do
+  if List.is_empty(laws) do laws
+  else
+    -- Through `sh` with stderr merged: the rows are printed on stderr, and a
+    -- direct Process.run of `march` returned both streams empty here.
+    let quoted = "'" ++ String.replace_all(path, "'", "'\\''") ++ "'"
+    match Process.run("sh", ["-c", "march --check --reflect-deps " ++ quoted ++ " 2>&1"]) do
+      Ok(r) -> Parser.with_status(laws, Process.stdout(r))
+      Err(_) -> laws
+    end
   end
 end
 
