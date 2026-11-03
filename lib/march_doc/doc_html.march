@@ -105,6 +105,7 @@ p{margin:8px 0}
 /* Item content */
 .name{font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;color:var(--bright);font-weight:600}
 .sig{font-family:'JetBrains Mono','Fira Code',monospace;font-size:12px;color:var(--dim);flex:1;margin-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.laws h4{margin:12px 0 4px;font-size:13px;color:var(--dim)}.laws ul{margin:0;padding-left:18px}.law-by{color:var(--dim);font-size:12px}
 .ib{padding:18px 20px;border-top:1px solid var(--bdr);display:none;font-size:14px;color:var(--text);line-height:1.7}
 .ib.open{display:block}
 
@@ -470,7 +471,30 @@ fn make_src_link(src_pattern, file_path, line_num) do
   end
 end
 
+-- The "Laws" section of a function: each lemma whose theorem calls it, with
+-- the theorem as written ("" when there is none).
+pfn law_items_go(laws : List(Law), acc : List(String)) : List(String) do
+  match laws do
+  Nil -> List.reverse(acc)
+  Cons(l, rest) ->
+    let item = "<li><code>" ++ Markdown.html_escape(Parser.law_theorem(l)) ++ "</code>" ++
+      " <span class=\"law-by\">(lemma <code>" ++ Markdown.html_escape(Parser.law_name(l)) ++ "</code>)</span></li>"
+    law_items_go(rest, Cons(item, acc))
+  end
+end
+
+fn laws_html(laws : List(Law)) : String do
+  if List.is_empty(laws) do ""
+  else
+    "<div class=\"laws\"><h4>Laws</h4><ul>" ++ String.join(law_items_go(laws, Nil), "\n") ++ "</ul></div>"
+  end
+end
+
 fn render_fn(entry, registry, mod_name, src_pattern, file_path, mode) do
+  render_fn_laws(entry, registry, mod_name, src_pattern, file_path, mode, Nil)
+end
+
+fn render_fn_laws(entry, registry, mod_name, src_pattern, file_path, mode, laws) do
   match entry do
   FnEntry(name, dsig, doc_opt, is_private, line_num) ->
     let badge_cls = if is_private do "bpfn" else "bfn" end
@@ -487,7 +511,8 @@ fn render_fn(entry, registry, mod_name, src_pattern, file_path, mode) do
       None -> ""
       Some(d) -> Markdown.md_to_html_mode(d, mode)
     end
-    let body = "<div class=\"ib\">" ++ doc_html ++ "</div>"
+    let laws_sec = laws_html(Parser.laws_about(laws, name))
+    let body = "<div class=\"ib\">" ++ doc_html ++ laws_sec ++ "</div>"
     "<div class=\"item\" id=\"" ++ anchor_id ++ "\">" ++ hdr ++ body ++ "</div>"
   end
 end
@@ -568,12 +593,12 @@ pfn render_iface_entries_go(entries, registry, mod_name, src_pattern, file_path,
   end
 end
 
-pfn render_fn_entries_go(entries, registry, mod_name, src_pattern, file_path, mode, acc) do
+pfn render_fn_entries_go(entries, registry, mod_name, src_pattern, file_path, mode, laws, acc) do
   match entries do
   Nil -> List.reverse(acc)
   Cons(e, rest) ->
-    let s = render_fn(e, registry, mod_name, src_pattern, file_path, mode)
-    render_fn_entries_go(rest, registry, mod_name, src_pattern, file_path, mode, Cons(s, acc))
+    let s = render_fn_laws(e, registry, mod_name, src_pattern, file_path, mode, laws)
+    render_fn_entries_go(rest, registry, mod_name, src_pattern, file_path, mode, laws, Cons(s, acc))
   end
 end
 
@@ -585,6 +610,12 @@ end
 -- served under (Some("") for march-lang.org's /assets/...); None renders the page
 -- exactly as render_module always has. See TryIt.
 fn render_module_try(info : ModuleInfo, sidebar : String, registry : List(TypeRef), src_pattern : Option(String), site_base : Option(String)) : String do
+  render_module_laws(info, sidebar, registry, src_pattern, site_base, Nil)
+end
+
+-- render_module_try with the module's lemmas (Parser.file_laws): each
+-- function's entry lists the laws about it.
+fn render_module_laws(info : ModuleInfo, sidebar : String, registry : List(TypeRef), src_pattern : Option(String), site_base : Option(String), laws : List(Law)) : String do
   let display_comment = Parser.module_comment(info)
   let mode = match site_base do
     None -> 0
@@ -602,8 +633,8 @@ fn render_module_try(info : ModuleInfo, sidebar : String, registry : List(TypeRe
     let iface_items = render_iface_entries_go(ifaces, registry, mod_name, src_pattern, file_path, mode, Nil)
     let pub_fns = sort_fns(List.filter(fns, Parser.is_pub))
     let prv_fns = sort_fns(List.filter(fns, Parser.is_prv))
-    let fn_items = render_fn_entries_go(pub_fns, registry, mod_name, src_pattern, file_path, mode, Nil)
-    let prv_items = render_fn_entries_go(prv_fns, registry, mod_name, src_pattern, file_path, mode, Nil)
+    let fn_items = render_fn_entries_go(pub_fns, registry, mod_name, src_pattern, file_path, mode, laws, Nil)
+    let prv_items = render_fn_entries_go(prv_fns, registry, mod_name, src_pattern, file_path, mode, laws, Nil)
     let types_html = if List.is_empty(type_items) do ""
       else "<h2>Types</h2>" ++ String.join(type_items, "\n") end
     let ifaces_html = if List.is_empty(iface_items) do ""

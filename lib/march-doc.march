@@ -23,7 +23,8 @@ pfn gen_module_pages(modules, all_modules, output_dir, sidebar_head, registry, s
   Cons(info, rest) ->
     let name = Parser.info_name(info)
     let sidebar = sidebar_head ++ DocHtml.sidebar_nav_for(all_modules, name)
-    let html = DocHtml.render_module_try(info, sidebar, registry, source_url, site_base)
+    let laws = Parser.file_laws(Parser.info_path(info))
+    let html = DocHtml.render_module_laws(info, sidebar, registry, source_url, site_base, laws)
     match File.write(output_dir ++ "/" ++ name ++ ".html", html) do
       Err(_) -> IO.warn("march_doc: failed to write " ++ name ++ ".html")
       Ok(_) -> ()

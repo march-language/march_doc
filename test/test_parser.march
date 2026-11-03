@@ -1324,6 +1324,30 @@ describe "Parser" do
 
   end
 
+  describe "laws" do
+
+    test "parse_laws reads each lemma's theorem as written" do
+      let src = "mod L do\n  fn rev(xs) do xs end\n  @[lemma]\n  -- a law\n  fn rev_rev(xs : List(a)) : {Unit | rev(rev(xs)) == xs || len(xs) >= 0} do\n    ()\n  end\n  fn plain(x : Int) : {Int | _ > 0} do x end\nend\n"
+      let laws = Parser.parse_laws(String.split(src, "\n"))
+      assert (List.length(laws) == 1)
+      match laws do
+      Cons(Law(n, t, line), _) ->
+        assert (n == "rev_rev")
+        assert (t == "rev(rev(xs)) == xs || len(xs) >= 0")
+        assert (line == 5)
+      Nil -> assert false
+      end
+    end
+
+    test "laws_about matches a call, not a longer name or a qualified one" do
+      let laws = Cons(Law("a", "catalog(x) == 1", 1), Cons(Law("b", "cat(x, Nil) == x", 2), Cons(Law("c", "M.cat(x) == x", 3), Nil)))
+      let about = Parser.laws_about(laws, "cat")
+      assert (List.length(about) == 1)
+      assert (List.map(about, Parser.law_name) == Cons("b", Nil))
+    end
+
+  end
+
 end
 
 end
