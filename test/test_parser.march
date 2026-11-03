@@ -1331,7 +1331,7 @@ describe "Parser" do
       let laws = Parser.parse_laws(String.split(src, "\n"))
       assert (List.length(laws) == 1)
       match laws do
-      Cons(Law(n, t, line), _) ->
+      Cons(Law(n, t, line, _), _) ->
         assert (n == "rev_rev")
         assert (t == "rev(rev(xs)) == xs || len(xs) >= 0")
         assert (line == 5)
@@ -1339,8 +1339,15 @@ describe "Parser" do
       end
     end
 
+    test "with_status reads lemma-def rows, per impl for an interface law" do
+      let out = "parity\tx\nlemma-def\tm.march\tN.cat_nil\tlemma:ab12:admitted\nlemma-def\tm.march\tN.short\tlemma:cd34:unproved\nlemma-def\tm.march\tN.assoc__Monoid_Int\tlemma:ef:admitted\nlemma-def\tm.march\tN.assoc__Monoid_Box\tlemma:01:unproved\n"
+      let laws = Cons(Law("cat_nil", "cat(xs, Nil) == xs", 1, ""), Cons(Law("short", "count(xs) <= 2", 2, ""), Cons(Law("assoc", "f(f(x, y), z) == f(x, f(y, z))", 3, ""), Cons(Law("other", "true", 4, ""), Nil))))
+      let st = List.map(Parser.with_status(laws, out), Parser.law_status)
+      assert (st == Cons("proved", Cons("not proved", Cons("proved for Monoid_Int; not proved for Monoid_Box", Cons("", Nil)))))
+    end
+
     test "laws_about matches a call, not a longer name or a qualified one" do
-      let laws = Cons(Law("a", "catalog(x) == 1", 1), Cons(Law("b", "cat(x, Nil) == x", 2), Cons(Law("c", "M.cat(x) == x", 3), Nil)))
+      let laws = Cons(Law("a", "catalog(x) == 1", 1, ""), Cons(Law("b", "cat(x, Nil) == x", 2, ""), Cons(Law("c", "M.cat(x) == x", 3, ""), Nil)))
       let about = Parser.laws_about(laws, "cat")
       assert (List.length(about) == 1)
       assert (List.map(about, Parser.law_name) == Cons("b", Nil))

@@ -457,6 +457,15 @@ describe "Html" do
       assert (String.contains(html, "(lemma <code>cat_nil</code>)"))
     end
 
+    test "a law's status shows beside it" do
+      let cat = FnEntry("cat", "cat(xs, ys)", None, false, 2)
+      let info = ModuleInfo("L", None, Cons(cat, Nil), Nil, Nil, "l.march")
+      let laws = Cons(Law("cat_nil", "cat(xs, Nil) == xs", 4, "proved"), Cons(Law("cat_two", "cat(xs, xs) == xs", 5, "not proved"), Nil))
+      let html = DocHtml.render_module_laws(info, "", Nil, None, None, laws)
+      assert (String.contains(html, "<span class=\"law-st law-ok\">proved</span>"))
+      assert (String.contains(html, "<span class=\"law-st\">not proved</span>"))
+    end
+
     test "a function no theorem calls has no Laws section" do
       let src = "mod L do\n  @[lemma]\n  fn cat_nil(xs : List(a)) : {Unit | cat(xs, Nil) == xs} do\n    ()\n  end\nend\n"
       let laws = Parser.parse_laws(String.split(src, "\n"))

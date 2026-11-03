@@ -17,9 +17,11 @@ type IfaceEntry = IfaceEntry(String, String, Option(String), List((String, Strin
 -- ModuleInfo(name, comment, fns, types, ifaces, file_path)
 type ModuleInfo = ModuleInfo(String, Option(String), List(FnEntry), List(TypeEntry), List(IfaceEntry), String)
 
--- Law(lemma name, theorem as written, line): an `@[lemma]` whose result type
--- `{Unit | P}` states the theorem P about the functions P mentions.
-type Law = Law(String, String, Int)
+-- Law(lemma name, theorem as written, line, status): an `@[lemma]` whose
+-- result type `{Unit | P}` states the theorem P about the functions P
+-- mentions.  The status is what the compiler reported ("proved", "not
+-- proved", or one such per impl for an interface law); "" when unknown.
+type Law = Law(String, String, Int, String)
 
 -- ── Accessors ────────────────────────────────────────────────────────────────
 
@@ -451,13 +453,19 @@ end
 
 fn law_name(l : Law) : String do
   match l do
-  Law(n, _, _) -> n
+  Law(n, _, _, _) -> n
   end
 end
 
 fn law_theorem(l : Law) : String do
   match l do
-  Law(_, t, _) -> t
+  Law(_, t, _, _) -> t
+  end
+end
+
+fn law_status(l : Law) : String do
+  match l do
+  Law(_, _, _, s) -> s
   end
 end
 
@@ -523,7 +531,7 @@ pfn parse_laws_go(ls : List(String), seen : Bool, line_num : Int, acc : List(Law
       if seen && (String.starts_with(t, "fn ") || String.starts_with(t, "pfn ")) do
         let dsig = extract_sig(line)
         let th = theorem_of(dsig)
-        let acc2 = if String.is_empty(th) do acc else Cons(Law(decl_name(dsig), th, line_num), acc) end
+        let acc2 = if String.is_empty(th) do acc else Cons(Law(decl_name(dsig), th, line_num, ""), acc) end
         parse_laws_go(rest, false, line_num + 1, acc2)
       else
         -- Other attributes, comments, docs and blank lines keep the mark.
@@ -552,6 +560,83 @@ pfn laws_about_go(laws : List(Law), name : String, acc : List(Law)) : List(Law) 
     if mentions(law_theorem(l), name) do laws_about_go(rest, name, Cons(l, acc))
     else laws_about_go(rest, name, acc) end
   end
+end
+
+-- ── Law status ───────────────────────────────────────────────────────────────
+-- `march --check --reflect-deps FILE` prints a `lemma-def` row per lemma:
+-- `lemma-def<TAB>file<TAB>Mod.name<TAB>lemma:<digest>:admitted|unproved`.
+-- An interface law is checked once per impl, as `<law>__<Iface>_<Type>`.
+
+pfn last_of(xs : List(String), d : String) : String do
+  match xs do
+  Nil -> d
+  Cons(x, Nil) -> x
+  Cons(_, rest) -> last_of(rest, d)
+  end
+end
+
+pfn last_segment(s : String) : String do last_of(String.split(s, "."), s) end
+
+-- (bare lemma name, "proved" | "not proved") for each `lemma-def` row.
+pfn status_rows_go(ls : List(String), acc : List((String, String))) : List((String, String)) do
+  match ls do
+  Nil -> List.reverse(acc)
+  Cons(l, rest) ->
+    match String.split(l, "\t") do
+      Cons("lemma-def", Cons(_, Cons(q, Cons(h, Nil)))) ->
+        let st = if String.ends_with(h, ":admitted") do "proved" else "not proved" end
+        status_rows_go(rest, Cons((last_segment(q), st), acc))
+      _ -> status_rows_go(rest, acc)
+    end
+  end
+end
+
+fn status_rows(output : String) : List((String, String)) do
+  status_rows_go(String.split(output, "\n"), Nil)
+end
+
+-- An impl's lemma for the law `law` (`law__Monoid_Int`), as "Monoid_Int".
+pfn impl_tag(row : String, law : String) : Option(String) do
+  let p = law ++ "__"
+  if String.starts_with(row, p) do
+    Some(String.slice(row, String.byte_size(p), String.byte_size(row) - String.byte_size(p)))
+  else None end
+end
+
+pfn impl_statuses_go(rows : List((String, String)), law : String, acc : List(String)) : List(String) do
+  match rows do
+  Nil -> List.reverse(acc)
+  Cons((n, st), rest) ->
+    match impl_tag(n, law) do
+      Some(tag) -> impl_statuses_go(rest, law, Cons(st ++ " for " ++ tag, acc))
+      None -> impl_statuses_go(rest, law, acc)
+    end
+  end
+end
+
+pfn exact_status(rows : List((String, String)), law : String) : String do
+  match rows do
+  Nil -> ""
+  Cons((n, st), rest) -> if n == law do st else exact_status(rest, law) end
+  end
+end
+
+-- The status of one law from the rows: its own row, else one per impl.
+fn status_of(rows : List((String, String)), law : String) : String do
+  let own = exact_status(rows, law)
+  if String.is_empty(own) do String.join(impl_statuses_go(rows, law, Nil), "; ") else own end
+end
+
+pfn with_status_go(laws : List(Law), rows : List((String, String)), acc : List(Law)) : List(Law) do
+  match laws do
+  Nil -> List.reverse(acc)
+  Cons(Law(n, t, line, _), rest) -> with_status_go(rest, rows, Cons(Law(n, t, line, status_of(rows, n)), acc))
+  end
+end
+
+-- [laws] with each one's status from [march --check --reflect-deps] output.
+fn with_status(laws : List(Law), output : String) : List(Law) do
+  with_status_go(laws, status_rows(output), Nil)
 end
 
 -- The laws whose theorem calls `name`.
