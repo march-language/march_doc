@@ -443,6 +443,31 @@ describe "Html" do
   end
 
 
+  describe "laws" do
+
+    test "a function's entry lists the lemmas whose theorem calls it" do
+      let src = "mod L do\n  fn cat(xs, ys) do xs end\n  fn catalog(n) do n end\n  @[lemma]\n  fn cat_nil(xs : List(a)) : {Unit | cat(xs, Nil) == xs} do\n    ()\n  end\nend\n"
+      let laws = Parser.parse_laws(String.split(src, "\n"))
+      let cat = FnEntry("cat", "cat(xs, ys)", None, false, 2)
+      let catalog = FnEntry("catalog", "catalog(n)", None, false, 3)
+      let info = ModuleInfo("L", None, Cons(cat, Cons(catalog, Nil)), Nil, Nil, "l.march")
+      let html = DocHtml.render_module_laws(info, "", Nil, None, None, laws)
+      assert (String.contains(html, "<h4>Laws</h4>"))
+      assert (String.contains(html, "<code>cat(xs, Nil) == xs</code>"))
+      assert (String.contains(html, "(lemma <code>cat_nil</code>)"))
+    end
+
+    test "a function no theorem calls has no Laws section" do
+      let src = "mod L do\n  @[lemma]\n  fn cat_nil(xs : List(a)) : {Unit | cat(xs, Nil) == xs} do\n    ()\n  end\nend\n"
+      let laws = Parser.parse_laws(String.split(src, "\n"))
+      let catalog = FnEntry("catalog", "catalog(n)", None, false, 3)
+      let info = ModuleInfo("L", None, Cons(catalog, Nil), Nil, Nil, "l.march")
+      let html = DocHtml.render_module_laws(info, "", Nil, None, None, laws)
+      assert (String.contains(html, "<h4>Laws</h4>") == false)
+    end
+
+  end
+
   describe "try it" do
 
     test "render_module without a site base has no panel or buttons" do
